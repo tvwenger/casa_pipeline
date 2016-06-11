@@ -12,6 +12,11 @@ Trey V. Wenger Jun 2016 - V1.1
                data, then calibrate, then use rflag, then generate plots
                DO NOT extend the flags - this deletes entire sources
                if the online flags already flagged too much data.
+Trey V. Wenger Jun 2016 - V1.2
+               added options to main function for configuration file to
+               define things like the number of line channels
+               and number of continuum channels, as well as number
+               of channels to average for calibration steps
 """
 
 import __main__ as casa
