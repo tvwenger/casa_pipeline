@@ -12,11 +12,12 @@ Trey V. Wenger Jun 2016 - V1.1
                data, then calibrate, then use rflag, then generate plots
                DO NOT extend the flags - this deletes entire sources
                if the online flags already flagged too much data.
-Trey V. Wenger Jun 2016 - V1.2
-               added options to main function for configuration file to
+Trey V. Wenger Jun 2016 - V2.0
+               added options for configuration file to
                define things like the number of line channels
                and number of continuum channels, as well as number
-               of channels to average for calibration steps
+               of channels to average for calibration steps, general
+               cleaning of code and reorganization
 """
 
 import __main__ as casa
@@ -24,110 +25,98 @@ import os
 import numpy as np
 import glob
 import re
-from time import gmtime, strftime
+import time
 import pickle
 import logging
 import logging.config
+import ConfigParser
 
-__VERSION__ = "1.1"
+__VERSION__ = "2.0"
 
 # load logging configuration file
 logging.config.fileConfig('logging.conf')
 
-# Set defaults
-# default project
-_DEFAULT_PROJECT="C2963"
-# default calibrators
-_DEFAULT_PRIMARY_CALS=["1934-638","0823-500"]
-_DEFAULT_SECONDARY_CALS=["1036-52","j1322-6532","1613-586",
-                         "0906-47","1714-397","1714-336"]
-# fluxscale coefficients from Miriad
-# had to dig in the f**king source code to find 0823
-# FYI, apparently 1934 doesn't agree with VLA
-# and 0823 is off by 10-15% according to Suarez+2015
-# S = fluxdensity[0]*log(f/reffreq)^(spix[0] + spix[1]*log(f) + spix[2]*log(f)^2)
-_REFFREQ = {'1934-638':'1MHz','0823-500':'1MHz'}
-_FLUXDENSITY = {'1934-638':[10**-30.7667,0,0,0],'0823-500':[10**-51.0361,0,0,0]}
-_SPIX = {'1934-638':[26.4908,-7.0977,0.605334],'0823-500':[41.4101,-10.7771,0.90468]}
-
-
-_CABB_CONFIGS = [
-    {"project":"C2482",
-     "iffreqs":[7000,9900, # MHz
-              6488,6680,6872,7096,7320,7544,7800,6104,7688,
-              6296,9164,9484,9804,10156,10508,10700,9740,8908],
-     "lineids":['cont1','cont2',
-              'H100a','H99a','H98a','H97a','H96a','H95a','H94a','H102a','KCl',
-              'H101a','H89a','H88a','H87a','H86a','H85a','H133d','H125g','H129g'],
-     "restfreqs":[7.000,9.900, # GHz
-                6.478760,6.676070,6.881490,7.095410,7.318290,7.550610,7.792870,6.106850,7.68907,
-                6.289140,9.173320,9.487820,9.816860,10.161300,10.522040,10.695910,9.748560,8.879180]},
-    {"project":"C2963",
-     "iffreqs":[5505,8540, # MHz
-                4609,4737,4865,4993,5153,5281,5441,5601,5761,5921,6113,6305,6465,
-                7548,7804,8060,8316,8572,9180,9500],
-     "lineids":['cont1','cont2',
-                'H112a','H111a','H110a','H109a','H108a','H107a','H106a','H105a','H104a','H103a','H102a','H101a','H100a',
-                'H95a','H94a','H93a','H92a','H91a','H89a','H88a'],
-     "restfreqs":[5.505,8.540, # GHz
-                  4.618790,4.744184,4.874158,5.008924,5.148704,5.293733,5.444262,5.600551,5.762881,5.931546,6.106857,6.289145,6.478761,
-                  7.550616,7.792872,8.045604,8.309384,8.584823,9.173323,9.487823]}
-    ]
-
 def natural_sort(l):
     """
-    Natural sort an alphanumeric list
+    Natural sort an alphanumeric list l
+
+    Inputs:
+      l        = alphanumeric list to be sorted
+
+    Returns:
+      sorted_l = naturally sorted list
     """
     convert = lambda text: int(text) if text.isdigit() else text.lower()
     alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
     return sorted(l, key = alphanum_key)
 
-def get_refant(vis='',primarycals=[],secondarycals=[],
-               my_line_spws='',my_cont_spws=''):
-    # start logger
-    logger = logging.getLogger("main")
-    fields = casa.vishead(vis=vis,mode='get',hdkey='field')[0]
-    for ant in ['CA01','CA02','CA03','CA04','CA05']:
-        is_good = True
-        for calib in primarycals+secondarycals:
-            if calib not in fields:
-                continue
-            for spw in my_line_spws.split(',')+my_cont_spws.split(','):
-                x = None
-                x = casa.visstat(vis=vis,field=calib,antenna=ant,spw=spw)
-                if x is None:
-                    is_good=False
-                    logger.info("{0} rejected because of {1} spw {2}".format(ant,calib,spw))
-                    break
-            if not is_good:
-                break
-        if is_good:
-            return ant
-    # if we get here, no good antenna was found. Just pick one, then
-    # CASA will choose a different one as necessary
-    return 'CA01'
+def get_refant(vis=''):
+    """
+    Return the best reference antenna to use. For now, just prompt
+    the user
+    TODO: make this smarter but also efficient
 
-def setup(vis='',project=''):
+    Inputs:
+      vis       = memasurement set
+
+    Returns:
+      refant    = the reference antenna
     """
-    Perform setup tasks
-    Return cabb_config, info from listobs, list of fields
+    casa.plotants(vis=vis)
+    refant = raw_input("Refant? ")
+    return refant
+
+def setup(vis='',config=None):
     """
+    Perform setup tasks: get reference antenna, generate listobs
+    file, find line and continuum spectral windows, generate a list
+    of primary calibrators, secondary calibrators, flux calibrators,
+    and science targets, create needed directories.
+
+    Inputs:
+      vis     = measurement set
+      config  = ConfigParser object for this project
+
+    Returns:
+      (my_cont_spws,my_line_spws,flux_cals,primary_cals,
+            secondary_cals,science_targets,refant)
+      my_cont_spws    = comma-separated string of continuum spws
+      my_line_spws    = comma-separated string of line spws
+      flux_cals       = list of flux calibrators
+      primary_cals    = list of primary calibrators
+      secondary_cals  = list of secondary calibrators
+      science_targets = list of science targets
+      refant          = reference antenna
+    """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    logger.info("Looking for CABB configuration...")
-    cabb_config = None
-    for c in _CABB_CONFIGS:
-        if c['project'] == project:
-            cabb_config = c
-    if cabb_config is None:
-        logger.critical("Error: project ID not found in available configurations")
-        raise ValueError("Error: project ID not found in available configurations")
-    logger.info("Found CABB configuration.")
-    # Read listobs file and find spw info
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None") 
+    #
+    # find good referance antenna
+    #
+    logger.info("Looking for good reference antenna...")
+    refant = get_refant(vis=vis)
+    if refant is None:
+        logger.critical("Error: No good referance antenna found!")
+        raise ValueError("No good referance antenna found!")
+    logger.info("Done. Found reference antenna: {0}".format(refant))
+    #
+    # Generate listobs file
+    #
     if not os.path.isfile('listobs.txt'):
         logger.info("Generating listobs file...")
         casa.listobs(vis=vis,listfile='listobs.txt')
         logger.info("Done.")
+    #
+    # Locate the position of spectral window info in listobs file
+    #
     logger.info("Reading listobs file...")
     with open('listobs.txt') as f:
         field_start_line = -1
@@ -144,29 +133,99 @@ def setup(vis='',project=''):
                 spw_end_line = line_num-1
         total_lines = line_num
     logger.info("Done.")
-    # determine spws with 128 vs 512 channels
     if spw_start_line == -1 or spw_end_line == -1:
         logger.critical("Error: could not find spectral window list in listobs.txt")
         raise ValueError("Error: could not find spectral window list in listobs.txt")
-    else:
-        spw_table = np.genfromtxt('listobs.txt',
-                                skip_header=spw_start_line+1,
-                                skip_footer=total_lines-spw_end_line,
-                                dtype=None,comments=';')
-        my_cont_spws = ",".join([str(id) for (id, numchans) in
-                                zip(spw_table['f0'],spw_table['f1'])
-                                if numchans == 33])
-        my_line_spws = ",".join([str(id) for (id, numchans) in
-                                zip(spw_table['f0'],spw_table['f1'])
-                                if numchans == 2049])
+    #
+    # determine line spws and continuum spws
+    #
+    spw_table = np.genfromtxt('listobs.txt',
+                              skip_header=spw_start_line+1,
+                              skip_footer=total_lines-spw_end_line,
+                              dtype=None,comments=';')
+    my_cont_spws = ",".join([str(id) for (id, numchans) in
+                             zip(spw_table['f0'],spw_table['f1'])
+                             if numchans == config.getint("Spectral Windows","Continuum Channels")])
+    my_line_spws = ",".join([str(id) for (id, numchans) in
+                             zip(spw_table['f0'],spw_table['f1'])
+                             if numchans == config.getint("Spectral Windows","Line Channels")])
     logger.info("Found continuum spws: {0}".format(my_cont_spws))
     logger.info("Found line spws: {0}".format(my_line_spws))
+    #
     # get field names
+    #
     logger.info("Looking for field names...")
     fields = casa.vishead(vis=vis,mode='get',hdkey='field')[0]
     logger.info("Found fields:")
     logger.info('{0}'.format(fields))
-    # make sure figures path exists
+    #
+    # Get primary calibrator fields if they are not in config
+    #
+    if config.get('Calibrators','Primary Calibrators') == '':
+        primary_cals = []
+        logger.info("Looking for primary calibrators...")
+        with open('listobs.txt') as f:
+            for line in f:
+                for field in fields:
+                    if field in line:
+                        if "CALIBRATE_BANDPASS" in line:
+                            primary_cals.append(field)
+        logger.info("Done")
+    else:
+        primary_cals = config.get('Calibrators','Primary Calibrators').splitlines()
+    logger.info("Primary calibrators: {0}".format(primary_cals))
+    #
+    # Get Secondary calibrator fields if they are not in config
+    #
+    if config.get('Calibrators','Secondary Calibrators') == '':
+        secondary_cals = []
+        logger.info("Looking for secondary calibrators...")
+        with open('listobs.txt') as f:
+            for line in f:
+                for field in fields:
+                    if field in line:
+                        if "CALIBRATE_AMPLI" in line or "CALIBRATE_PHASE" in line:
+                            secondary_cals.append(field)
+        logger.info("Done")
+    else:
+        secondary_cals = config.get('Calibrators','Secondary Calibrators').splitlines()
+    logger.info("Secondary calibrators: {0}".format(secondary_cals))
+    #
+    # Get flux calibrator fields if they are not in config
+    #
+    if config.get('Calibrators','Flux Calibrators') == '':
+        flux_cals = []
+        logger.info("Looking for flux calibrators...")
+        with open('listobs.txt') as f:
+            for line in f:
+                for field in fields:
+                    if field in line:
+                        if "CALIBRATE_FLUX" in line:
+                            flux_cals.append(field)
+        logger.info("Done")
+    else:
+        flux_cals = config.get('Calibrators','Flux Calibrators').splitlines()
+    logger.info("Flux calibrators: {0}".format(flux_cals))
+    #
+    # Check that flux calibrators are in primary calibrator list
+    # if not, add them
+    #
+    for flux_cal in flux_cals:
+        if flux_cal not in primary_cals:
+            primary_cals.append(flux_cal)
+    #
+    # Get science targets
+    # 
+    science_targets = []
+    logger.info("Looking for science targets...")
+    for field in fields:
+        if field not in primary_cals+secondary_cals:
+            science_targets.append(field)
+    logger.info("Done")
+    logger.info("Science targets: {0}".format(science_targets))
+    #
+    # create directories for figures
+    #
     if not os.path.isdir('calib_figures'):
         logger.info("Creating calib_figures directory...")
         os.makedirs('calib_figures')
@@ -175,65 +234,123 @@ def setup(vis='',project=''):
         logger.info("Creating scitarg_figures directory...")
         os.makedirs('scitarg_figures')
         logger.info("Done.")
-    return cabb_config,my_cont_spws,my_line_spws,fields
+    return (my_cont_spws,my_line_spws,flux_cals,primary_cals,
+            secondary_cals,science_targets,refant)
 
-def preliminary_flagging(vis='',my_line_spws=''):
+def preliminary_flagging(vis='',my_line_spws='',my_cont_spws='',config=None):
     """
-    Flag antenna 6, birdies, qvack, and shadowed antennas
+    Perform preliminary flagging: shadowed antennas, quack,
+    flags from configuration file, then tfcrop all raw data
+
+    Inputs:
+      vis          = measurement set
+      my_line_spws = comma-separated string of line spws
+      my_cont_spws = comma-separated string of continuum spws
+      config       = ConfigParser object for this project
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None")
+    #
     # save initial flag state
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='starting_flags_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='starting_flags_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
-    # Flag antenna6
-    logger.info("Flagging antenna 6...")
-    casa.flagdata(vis=vis,mode='manual',antenna='CA06',
-                  flagbackup=False,extendflags=False)
-    logger.info("Done.")
+    #
     # Flag shadowed antennas
+    #
     logger.info("Flagging shadowed antennas...")
     casa.flagdata(vis=vis,mode='shadow',tolerance=-3.0,
                   flagbackup=False,extendflags=False)
     logger.info("Done.")
+    #
     # Flag the beginning of each scan
+    #
     logger.info("Flagging the beginning of each scan (quack)...")
     casa.flagdata(vis=vis,mode='quack',quackinterval=6,
                   flagbackup=False,extendflags=False)
     logger.info("Done.")
-    # Flag birdies in line spws
-    logger.info("Flagging birdies in line spws...")
-    badchans = ['{0};{1}'.format(foo,bar) for (foo,bar) in zip(range(127,1920,128),range(128,1920,128))]
-    badchans = ';'.join(badchans)
-    line_spws = ','.join([i+':'+badchans
-                          for i in my_line_spws.split(',')])
-    casa.flagdata(vis=vis,mode='manual',spw=line_spws,
-                  flagbackup=False,extendflags=False)
-    logger.info("Done.")
+    #
+    # Flag antennas from configuration file
+    #
+    antenna = config.get("Flags","Antenna")
+    if antenna != '':
+        logger.info("Flagging antennas from configuration file: {0}".format(antenna))
+        casa.flagdata(vis=vis,mode='manual',antenna=antenna,
+                      flagbackup=False,extendflags=False)
+        logger.info("Done.")
+    #
+    # Flag line channels from configuration file
+    #
+    badchans = config.get("Flags","Line Channels").split(',')
+    if len(badchans) > 0:
+        logger.info("Flagging line channels from configuration file: {0}".format(badchans))
+        badchans = ';'.join(badchans)
+        line_spws = ','.join([i+':'+badchans for i in my_line_spws.split(',')])
+        casa.flagdata(vis=vis,mode='manual',spw=line_spws,
+                      flagbackup=False,extendflags=False)
+        logger.info("Done.")
+    #
+    # Flag continuum channels from configuration file
+    #
+    badchans = config.get("Flags","Continuum Channels").split(',')
+    if len(badchans) > 0:
+        logger.info("Flagging continuum channels from configuration file: {0}".format(badchans))
+        badchans = ';'.join(badchans)
+        cont_spws = ','.join([i+':'+badchans for i in my_cont_spws.split(',')])
+        casa.flagdata(vis=vis,mode='manual',spw=cont_spws,
+                      flagbackup=False,extendflags=False)
+        logger.info("Done.")
+    #
     # Run tfcrop on all fields
+    #
     logger.info("Running tfcrop on raw data column...")
     casa.flagdata(vis=vis,mode='tfcrop',
                   timefit='poly',freqfit='poly',
                   flagbackup=False,datacolumn='data',
                   extendflags=False)
     logger.info("Done.")
+    #
+    # Save the flags
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='preliminary_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='preliminary_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def auto_flag_calibrators(vis='',primarycals=[],secondarycals=[],
-                         all_fields=[]):
+def auto_flag_calibrators(vis='',primary_cals=[],secondary_cals=[])
     """
-    Perform automatic flagging of calibrators using rflag and tfcrop
+    Perform automatic flagging of calibrators using rflag on
+    calibrated data or tfcrop on raw data
+
+    Inputs:
+      vis            = measurement set
+      primary_cals   = list of primary calibrators (must include flux cals)
+      secondary_cals = list of secondary calibrators
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    # perform round of automatic flagging
-    field = ','.join([i for i in primarycals+secondarycals if i in all_fields])
+    #
     # check if calibrators have corrected datacolumn
+    #
+    field = ','.join(primary_cals+secondary_cals)
     stat = None
     logger.info("Checking if ms contains corrected data column...")
     stat = casa.visstat(vis=vis,field=field,spw='0',datacolumn='corrected')
@@ -243,12 +360,18 @@ def auto_flag_calibrators(vis='',primarycals=[],secondarycals=[],
     else:
         logger.info("Done. ms does contain corrected data column.")
         datacolumn='corrected'
+    #
+    # Run rflag on calibrated data
+    #
     if datacolumn == 'corrected':
         logger.info("Running rflag on corrected data column...")
         casa.flagdata(vis=vis,mode='rflag',field=field,
                       flagbackup=False,datacolumn=datacolumn,
                       extendflags=False)
         logger.info("Done.")
+    #
+    # Run tfcrop on uncalibrated data
+    #
     else:
         logger.info("Running tfcrop on raw data column...")
         casa.flagdata(vis=vis,mode='tfcrop',field=field,
@@ -256,20 +379,34 @@ def auto_flag_calibrators(vis='',primarycals=[],secondarycals=[],
                       flagbackup=False,datacolumn='data',
                       extendflags=False)
         logger.info("Done.")
+    #
+    # Save the flags
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='autoflag_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='autoflag_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
-                         all_fields=[]):
+def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[]):
     """
-    Generate visibility plots for inspection
+    Generate visibility plots for calibrators
+
+    Inputs:
+      vis            = measurement set
+      primary_cals   = list of primary calibrators (must include flux cals)
+      secondary_cals = list of secondary calibrators
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    field = ','.join([i for i in primarycals+secondarycals if i in all_fields])
+    #
     # check if calibrators have corrected datacolumn
+    #
+    field = ','.join(primary_cals+secondary_cals)
     stat = None
     logger.info("Checking if ms contains corrected data column...")
     stat = casa.visstat(vis=vis,spw='0',field=field,datacolumn='corrected')
@@ -279,11 +416,16 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
     else:
         logger.info("Done. ms does contain corrected data column.")
         datacolumn='corrected'
-    # generate plots for manual inspection
+    #
+    # Generate the plots
+    #
     logger.info("Generating plots for manual inspection...")
     plotnum=0
     plots = []
-    for field in [i for i in primarycals+secondarycals if i in all_fields]:
+    for field in primary_cals+secondary_cals:
+        #
+        # Real vs Imaginary
+        #
         casa.plotms(vis=vis,xaxis='real',yaxis='imag',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -292,6 +434,9 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'real','yaxis':'imag','avgtime':'','avgchannel':''})
         plotnum += 1
+        #
+        # Amplitude vs Time
+        #
         casa.plotms(vis=vis,xaxis='time',yaxis='amp',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -301,6 +446,9 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'time','yaxis':'amp','avgtime':'','avgchannel':'1e7'})
         plotnum += 1
+        #
+        # Phase vs Time
+        #
         casa.plotms(vis=vis,xaxis='time',yaxis='phase',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -310,6 +458,9 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'time','yaxis':'phase','avgtime':'','avgchannel':'1e7'})
         plotnum += 1
+        #
+        # Amplitude vs Channel
+        #
         casa.plotms(vis=vis,xaxis='channel',yaxis='amp',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -319,6 +470,9 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'channel','yaxis':'amp','avgtime':'1e7','avgchannel':''})
         plotnum += 1
+        #
+        # Phase vs Channel
+        # 
         casa.plotms(vis=vis,xaxis='channel',yaxis='phase',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -328,8 +482,22 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'channel','yaxis':'phase','avgtime':'1e7','avgchannel':''})
         plotnum += 1
+        #
+        # Amplitude vs UV-distance (in wavelength units)
+        #
+        casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,
+                    ydatacolumn=datacolumn,iteraxis='spw',
+                    coloraxis='baseline',correlation='XX,YY',
+                    title='PlotID: {0} Field: {1}'.format(plotnum,field),
+                    plotfile='calib_figures/{0}.png'.format(plotnum),
+                    overwrite=True,showgui=False,exprange='all')
+        plots.append({'field':field,'xaxis':'uvwave','yaxis':'amp','avgtime':'','avgchannel':''})
+        plotnum += 1
     logger.info("Done.")
-    logger.info("Generating tex document...")
+    #
+    # Generate PDF to display plots
+    #
+    logger.info("Generating PDF...")
     num_plots = plotnum
     iplot = 0
     with open('calibrator_plots.tex','w') as f:
@@ -356,22 +524,148 @@ def gen_calibrator_plots(vis='',primarycals=[],secondarycals=[],
                 iplot+=1
         f.write(r"\end{figure}"+"\n")
         f.write(r"\end{document}"+"\n")
-    os.system('pdflatex calibrator_plots.tex')
+    os.system('pdflatex -interaction=batchmode calibrator_plots.tex')
     logger.info("Done.")
+    #
+    # Save plot list to a pickle object
+    #
     logger.info("Saving plot list to pickle...")
     with open('calibrator_plots.pkl','w') as f:
         pickle.dump(plots,f)
     logger.info("Done.")
 
-def manual_flag_calibrators(vis='',primarycals=[],secondarycals=[],
-                            all_fields=[]):
+def flag(vis='',all_fields=[]):
     """
-    manually flag calibrators
+    Interactively flag
+
+    Inputs:
+      vis            = measurement set
+      all_fields     = list of fields currently being flagged
+                       (i.e. list of calibrators if we are flagging
+                        calibrators)
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    field = ','.join([i for i in primarycals+secondarycals if i in all_fields])
+    #
+    # Build list of flag commands
+    #
+    flag_commands = []
+    while True:
+        #
+        # Prompt user for field, scan, spectral window, time range,
+        # antenna, and correlation to flag
+        #
+        print("Field? Empty = {0}".format(','.join(all_fields)))
+        field = raw_input()
+        if field == '':
+            field = ','.join(all_fields)
+        if field not in ','.join(all_fields):
+            print('{0} is not in {1}'.format(field,all_fields))
+            continue
+        print("Scan? Empty = all scans (ex. 0 to flag scan 0, 1~3 to flag scans 1, 2, and 3)")
+        scan = raw_input()
+        print("Spectral window and channels? Empty = all spws (ex. 2:100~150;200:250,5:1200~1210 is spw 2, chans 100 to 150  and 200 to 250, and spw 5 chans 1200 to 1210)")
+        spw = raw_input()
+        print("Time range? Empty = all times (ex. 10:23:45~10:23:55)")
+        timerange = raw_input()
+        print("Antenna or baseline? Empty = all antennas/baselines (ex. CA01 to flag ant 1 or CA01&CA02 to flag 1-2 baseline)")
+        antenna = raw_input()
+        print("Correlation? Empty = all correlations (XX,YY,XY,YX)")
+        correlation = raw_input()
+        #
+        # Build flag command
+        #
+        parts = []
+        if len(field) > 0:
+            parts.append("field='{0}'".format(field))
+        if len(scan) > 0:
+            parts.append("scan='{0}'".format(scan))
+        if len(spw) > 0:
+            parts.append("spw='{0}'".format(spw))
+        if len(timerange) > 0:
+            parts.append("timerange='{0}'".format(timerange))
+        if len(antenna) > 0:
+            parts.append("antenna='{0}'".format(antenna))
+        if len(correlation) > 0:
+            parts.append("correlation='{0}'".format(correlation))
+        flag_commands.append(' '.join(parts))
+        #
+        # Confirm with user, or append more flag commands
+        #
+        print("Will execute:")
+        print("flagdata(vis='{0}',mode='list',flagbackup=False,extendflags=False,".format(vis))
+        for icmd,cmd in enumerate(flag_commands):
+            if len(flag_commands) == 1:
+                print("         inpfile=[\"{0}\"])".format(cmd))
+            elif icmd == 0:
+                print("         inpfile=[\"{0}\",".format(cmd))
+            elif icmd == len(flag_commands)-1:
+                print("                  \"{0}\"])".format(cmd))
+            else:
+                print("                  \"{0}\",".format(cmd))
+        print("Proceed [y/n] or add another flag command [a]?")
+        go = raw_input()
+        #
+        # Execute flag command
+        #
+        if go.lower() == 'y':
+            logger.info("Executing:")
+            logger.info("flagdata(vis='{0}',mode='list',flagbackup=False,extendflags=False,".format(vis))
+            for icmd,cmd in enumerate(flag_commands):
+                if len(flag_commands) == 1:
+                    logger.info("         inpfile=[\"{0}\"])".format(cmd))
+                elif icmd == 0:
+                    logger.info("         inpfile=[\"{0}\",".format(cmd))
+                elif icmd == len(flag_commands)-1:
+                    logger.info("                  \"{0}\"])".format(cmd))
+                else:
+                    logger.info("                  \"{0}\",".format(cmd))
+            #
+            # Save flag command to manual flags list
+            #
+            with open('manual_flags.txt','a') as f:
+                for cmd in flag_commands:
+                    f.write(time.strftime('%Y%m%d%H%M%S',time.gmtime())+': '+cmd+'\n')
+            casa.flagdata(vis=vis,mode='list',flagbackup=False,extendflags=False,
+                          inpfile=flag_commands)
+            break
+        #
+        # Append another flag command
+        #
+        elif go.lower() == 'a':
+            continue
+        #
+        # Quit flagging
+        #
+        else:
+            print("Aborting...")
+            break
+
+def manual_flag_calibrators(vis='',primary_cals=[],secondary_cals=[]):
+    """
+    Interactively plot and flag the calibrators
+
+    Inputs:
+      vis            = measurement set
+      primary_cals   = list of primary calibrators (must include flux cals)
+      secondary_cals = list of secondary calibrators
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    #
     # check if calibrators have corrected datacolumn
+    #
+    field = ','.join(primary_cals+secondary_cals)
     stat = None
     logger.info("Checking if ms contains corrected data column...")
     stat = casa.visstat(vis=vis,spw='0',field=field,datacolumn='corrected')
@@ -381,206 +675,226 @@ def manual_flag_calibrators(vis='',primarycals=[],secondarycals=[],
     else:
         logger.info("Done. ms does contain corrected data column.")
         datacolumn='corrected'
-    # perform round of manual flagging
+    #
+    # Read the plot list from the pickle object
+    #
     logger.info("Reading plot list from pickle...")
     with open('calibrator_plots.pkl','r') as f:
         plots = pickle.load(f)
     num_plots = len(plots)
     logger.info("Done.")
+    #
+    # Display menu option to user
+    #
     logger.info("Please inspect calibrator_plots.pdf then perform manual calibrations.")
     while True:
         print("f - flag some data")
         print("plot id number - generate interactive version of plot with this id")
         print("quit - end this flagging session")
         answer = raw_input()
+        #
+        # Flag some data
+        #
         if answer.lower() == 'f':
-            flag_commands = []
-            while True:
-                print("Field? Empty = all calibrator fields")
-                field = raw_input()
-                if field == '':
-                    field = ','.join([i for i in primarycals+secondarycals if i in all_fields])
-                print("Spectral window and channels? Empty = all spws (ex. 2:100~150;200:250,5:1200~1210 is spw 2, chans 100 to 150  and 200 to 250, and spw 5 chans 1200 to 1210)")
-                spw = raw_input()
-                print("Time range? Empty = all times (ex. 10:23:45~10:23:55)")
-                timerange = raw_input()
-                print("Antenna or baseline? Empty = all antennas/baselines (ex. CA01 to flag ant 1 or CA01&CA02 to flag 1-2 baseline)")
-                antenna = raw_input()
-                print("Correlation? Empty = all correlations (XX,YY,XY,YX)")
-                correlation = raw_input()
-                parts = []
-                if len(field) > 0:
-                    parts.append("field='{0}'".format(field))
-                if len(spw) > 0:
-                    parts.append("spw='{0}'".format(spw))
-                if len(timerange) > 0:
-                    parts.append("timerange='{0}'".format(timerange))
-                if len(antenna) > 0:
-                    parts.append("antenna='{0}'".format(antenna))
-                if len(correlation) > 0:
-                    parts.append("correlation='{0}'".format(correlation))
-                flag_commands.append(' '.join(parts))
-                print("Will execute:")
-                print("flagdata(vis='{0}',mode='list',flagbackup=False,extendflags=False,".format(vis))
-                for icmd,cmd in enumerate(flag_commands):
-                    if len(flag_commands) == 1:
-                        print("         inpfile=[\"{0}\"])".format(cmd))
-                    elif icmd == 0:
-                        print("         inpfile=[\"{0}\",".format(cmd))
-                    elif icmd == len(flag_commands)-1:
-                        print("                  \"{0}\"])".format(cmd))
-                    else:
-                        print("                  \"{0}\",".format(cmd))
-                print("Proceed [y/n] or add another flag command [a]?")
-                go = raw_input()
-                if go.lower() == 'y':
-                    logger.info("Executing:")
-                    logger.info("flagdata(vis='{0}',mode='list',flagbackup=False,extendflags=False,".format(vis))
-                    for icmd,cmd in enumerate(flag_commands):
-                        if len(flag_commands) == 1:
-                            logger.info("         inpfile=[\"{0}\"])".format(cmd))
-                        elif icmd == 0:
-                            logger.info("         inpfile=[\"{0}\",".format(cmd))
-                        elif icmd == len(flag_commands)-1:
-                            logger.info("                  \"{0}\"])".format(cmd))
-                        else:
-                            logger.info("                  \"{0}\",".format(cmd))
-                    with open('manual_flags.txt','a') as f:
-                        for cmd in flag_commands:
-                            f.write(strftime('%Y%m%d%H%M%S',gmtime())+': '+cmd+'\n')
-                    casa.flagdata(vis=vis,mode='list',flagbackup=False,extendflags=False,
-                                  inpfile=flag_commands)
-                    break
-                elif go.lower() == 'a':
-                    continue
-                else:
-                    print("Aborting...")
-                    break
+            flag(vis,all_fields=primary_cals+secondary_cals)
+        #
+        # Stop interactively plotting and flagging
+        #
         elif answer.lower() == 'quit':
             break
+        #
+        # Generate interactive plot
+        #
         else:
             try:
                 plotid = int(answer)
             except ValueError:
                 print("Plot ID not valid!")
                 continue
-            if plotid < num_plots:
-                casa.plotms(vis=vis,xaxis=plots[plotid]['xaxis'],yaxis=plots[plotid]['yaxis'],field=plots[plotid]['field'],
-                            ydatacolumn=datacolumn,iteraxis='spw',
-                            coloraxis='baseline',correlation='XX,YY',
-                            title='PlotID: {0} Field: {1}'.format(plotid,plots[plotid]['field']),
-                            avgchannel=plots[plotid]['avgchannel'],avgtime=plots[plotid]['avgtime'])
+            if plotid >= num_plots:
+                print("Plot ID not valid!")
+                continue
+            casa.plotms(vis=vis,xaxis=plots[plotid]['xaxis'],yaxis=plots[plotid]['yaxis'],field=plots[plotid]['field'],
+                        ydatacolumn=datacolumn,iteraxis='spw',
+                        coloraxis='baseline',correlation='XX,YY',
+                        title='PlotID: {0} Field: {1}'.format(plotid,plots[plotid]['field']),
+                        avgchannel=plots[plotid]['avgchannel'],avgtime=plots[plotid]['avgtime'])
+    #
+    # Save the flags
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='manualflag_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='manualflag_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def calibrate_calibrators(vis='',primarycals=[],secondarycals=[],
-                          all_fields=[],my_line_spws='',
-                          my_cont_spws=''):
+def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
+                          flux_cals=[],my_line_spws='',
+                          my_cont_spws='',refant='',config=None):
     """
-    Calculate calibration solutions and apply to calibrators
+    Calculate calibration solutions (bandpass, delays, complex gains)
+    and apply the calibration solutions to the calibrators
+
+    Inputs:
+      vis            = measurement set
+      primary_cals   = list of primary calibrators (must include flux cals)
+      secondary_cals = list of secondary calibrators
+      flux_cals      = list of flux calibrators
+      my_line_spws   = comma-separated string of line spws
+      my_cont_spws   = comma-separated string of continuum spws
+      refant         = reference antenna
+      config         = ConfigParser object for this project
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    # find good referance antenna
-    logger.info("Looking for good reference antenna...")
-    refant = get_refant(vis=vis,primarycals=primarycals,
-                        secondarycals=secondarycals,my_line_spws=my_line_spws,
-                        my_cont_spws=my_cont_spws)
-    if refant is None:
-        logger.critical("No good referance antenna found!")
-        raise ValueError("No good referance antenna found!")
-    logger.info("Done. Found reference antenna: {0}".format(refant))
-    # find first primary cal in all fields
-    fluxcal = None
-    for cal in primarycals:
-        if cal in all_fields:
-            fluxcal=cal
-            break
-    if fluxcal is None:
-        logger.critical("No good flux calibrator found!")
-        raise ValueError("No good flux calibrator found!")
-    # initial delay calibration on bandpass calibrators
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None")
+    #
+    # set the model for the flux calibrators
+    #
+    logger.info("Setting the flux calibrator models...")
+    for flux_cal in flux_cals:
+        #
+        # If flux calibrator model is supplied in config, use that
+        #
+        manual_flux_cals = config.get('Flux Calibrator Models','Name').splitlines()
+        if flux_cal in manual_flux_cals:
+            # get index of flux_cal in manual_flux_cals
+            flux_idx = manual_flux_cals.index(flux_cal)
+            # get reference frequency
+            reffreq = config.get('Flux Calibrator Models','Reference Frequency').splitlines()
+            reffreq = reffreq[flux_idx]
+            # get fluxdensity and convert to proper units
+            fluxdensity = config.get('Flux Calibrator Models','Log Flux Density').splitlines()
+            fluxdensity = fluxdensity[flux_idx]
+            fluxdensity = [10.**float(i) for i in fluxdensity.split(',')]
+            # get spectral index coefficients
+            spix = config.get('Flux Calibrator Models','Spectral Index Coefficients').splitlines()
+            spix = spix[flux_idx]
+            spix = [float(i) for i in spix.split(',')]
+            # Run setjy in manual mode
+            casa.setjy(vis=vis,field=flux_cal,scalebychan=True,
+                       standard='manual',fluxdensity=fluxdensity,
+                       spix=spix,reffreq=reffreq)
+        #
+        # Otherwise, use CASA model
+        #
+        else:
+            casa.setjy(vis=vis,field=flux_cal,scalebychan=True)
+    logger.info("Done.")
+    #
+    # pre-bandpass calibration delay calibration on primary calibrators
+    # (linear slope in phase vs frequency)
+    #
+    field = ','.join(primary_cals)
     logger.info("Calculating delay calibration table for primary calibrators...")
-    field = ','.join([i for i in primarycals if i in all_fields])
     if os.path.isdir('delays.cal'):
         casa.rmtables('delays.cal')
     casa.gaincal(vis=vis,caltable='delays.cal',field=field,
                  refant=refant,gaintype='K',minblperant=1)
     logger.info("Done.")
-    # short timescale phase calibration
+    #
+    # integration timescale phase calibration
+    # (phase vs time)
+    #
     logger.info("Calculating phase calibration table on integration timescales for primary calibrators...")
     if os.path.isdir('phase_int.cal'):
         casa.rmtables('phase_int.cal')
     casa.gaincal(vis=vis,caltable="phase_int.cal",field=field,
-                 solint="int",calmode="p",refant=refant,gaintype="G",
-                 gaintable=['delays.cal'],minblperant=1)
+                 solint="int",calmode="p",refant=refant,
+                 gaintype="G",minsnr=2.0,minblperant=1,
+                 gaintable=['delays.cal'])
     logger.info("Done.")
-    # bandpass calibration on all channels of continuum bands
+    #
+    # bandpass calibration for continuum spws. Combine all scans,
+    # average some channels as defined in configuration file
+    #
     logger.info("Calculating bandpass calibration table for primary calibrators...")
     if os.path.isdir('bandpass.cal'):
         casa.rmtables('bandpass.cal')
+    chan_avg = config.get('Calibration','Continuum Channels')
+    if chan_avg == '':
+        solint='inf'
+    else:
+        solint='inf,{0}chan'.format(chan_avg)
     casa.bandpass(vis=vis,caltable='bandpass.cal',field=field,
-                  spw=my_cont_spws,refant=refant,solint='inf',
+                  spw=my_cont_spws,refant=refant,solint=solint,
                   combine='scan',solnorm=True,minblperant=1,
                   gaintable=['delays.cal','phase_int.cal'])
-    # bandpass calibration average 64 channels of line bands
+    #
+    # bandpass calibration for line spws. Combine all scans,
+    # average some channels as defined in configuration file,
+    # append to continuum channel bandpass calibration table
+    #
+    chan_avg = config.get('Calibration','Line Channels')
+    if chan_avg == '':
+        solint='inf'
+    else:
+        solint='inf,{0}chan'.format(chan_avg)
     casa.bandpass(vis=vis,caltable='bandpass.cal',field=field,
-                  spw=my_line_spws,refant=refant,solint='inf,64chan',
+                  spw=my_line_spws,refant=refant,solint=solint,
                   combine='scan',solnorm=True,minblperant=1,append=True,
                   gaintable=['delays.cal','phase_int.cal'])
     logger.info("Done.")
-    # apply bandpass solutions back to primary calibrators
-    logger.info("Applying calibration tables to primary calibrators...")
-    for field in [i for i in primarycals if i in all_fields]:
-        casa.applycal(vis=vis,field=field,calwt=False,
-                      gaintable=['delays.cal','phase_int.cal','bandpass.cal'],
-                      gainfield=field,flagbackup=False)
-    logger.info("Done.")
-    # set flux scale
-    logger.info("Setting the flux scale...")
-    casa.setjy(vis=vis,field=fluxcal,scalebychan=True,
-               standard='manual',
-               fluxdensity=_FLUXDENSITY[fluxcal],
-               spix=_SPIX[fluxcal],
-               reffreq=_REFFREQ[fluxcal])
-    logger.info("Done.")
-    # re-calculate short-timescale phase corrections for all calibrators
+    #
+    # integration timescale phase corrections for all calibrators
+    # required for accurate amplitude calibration
+    #
+    field = ','.join(primary_cals+secondary_cals)
     logger.info("Re-calculating the phase calibration table on integration timescales for all calibrators...")
-    field = ','.join([i for i in primarycals+secondarycals if i in all_fields])
     if os.path.isdir('phase_int.cal'):
         casa.rmtables('phase_int.cal')
-    casa.gaincal(vis=vis,caltable="phase_int.cal",field=field,minblperant=1,
-                solint="int",calmode="p",refant=refant,gaintype="G",
+    casa.gaincal(vis=vis,caltable="phase_int.cal",field=field,
+                solint="int",calmode="p",refant=refant,
+                gaintype="G",minsnr=2.0,minblperant=1,
                 gaintable=['delays.cal','bandpass.cal'])
     logger.info("Done.")
-    # scan-timescale phase corrections
+    #
+    # scan timescale phase corrections for all calibrators
+    # required to apply to science targets
+    #
     logger.info("Calculating the phase calibration table on scan timescales for all calibrators...")
     if os.path.isdir('phase_scan.cal'):
         casa.rmtables('phase_scan.cal')
-    casa.gaincal(vis=vis,caltable="phase_scan.cal",field=field,minblperant=1,
-                solint="inf",calmode="p",refant=refant,gaintype="G",
-                gaintable=['delays.cal','bandpass.cal'])
+    casa.gaincal(vis=vis,caltable="phase_scan.cal",field=field,
+                 solint="inf",calmode="p",refant=refant,
+                 gaintype="G",minsnr=2.0,minblperant=1,
+                 gaintable=['delays.cal','bandpass.cal'])
     logger.info("Done.")
-    # amplitude corrections with short phase
+    #
+    # scan timescale amplitude corrections using
+    # integration timescale phase calibration
+    #
     logger.info("Calculating the amplitude and phase calibration table on scan timescales for all calibrators...")
     if os.path.isdir('apcal.cal'):
         casa.rmtables('apcal.cal')
-    casa.gaincal(vis=vis,caltable="apcal.cal",field=field,minblperant=1,
+    casa.gaincal(vis=vis,caltable="apcal.cal",field=field,
                  solint="inf",calmode="ap",refant=refant,
+                 minsnr=2.0,minblperant=1,
                  gaintable=['delays.cal','bandpass.cal','phase_int.cal'])
     logger.info("Done.")
+    #
     # set the flux scale
+    #
     logger.info("Calculating the flux calibration table...")
     if os.path.isdir('flux.cal'):
         casa.rmtables('flux.cal')
     casa.fluxscale(vis=vis,caltable="apcal.cal",fluxtable="flux.cal",
-                   reference=fluxcal,incremental=True)
+                   reference=','.join(flux_cals),incremental=True)
     logger.info("Done.")
-    # apply solutions back to calibrators
+    #
+    # apply calibration solutions to calibrators
+    #
     logger.info("Applying calibration tables to all calibrators...")
-    for field in [i for i in primarycals+secondarycals if i in all_fields]:
+    for field in primary_cals+secondary_cals:
         casa.applycal(vis=vis,field=field,calwt=False,
                       gaintable=['delays.cal','bandpass.cal',
                                  'phase_int.cal','apcal.cal',
@@ -588,22 +902,32 @@ def calibrate_calibrators(vis='',primarycals=[],secondarycals=[],
                       gainfield=['','',field,field,field],
                       flagbackup=False)
     logger.info("Done.")
+    #
     # save flag state
+    #
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='calibrate_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='calibrate_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
 
-def calibrate_sciencetargets(vis='',primarycals=[],secondarycals=[],
-                             all_fields=[]):
+def calibrate_sciencetargets(vis='',science_targets=[]):
     """
     Apply calibration solutions to science targets
+
+    Inputs:
+      vis             = measurement set
+      science_targets = list of science targets
+
+    Returns:
+      Nothing    
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    for field in all_fields:
-        if field in primarycals+secondarycals:
-            continue
-        # use all fields in delays/bandpass
-        # use nearest field in gain
+    for field in science_targets:
+        #
+        # use all fields in delays and bandpass
+        # use nearest field in complex gains and flux
+        #
         logger.info("Applying calibration solutions to {0}".format(field))
         casa.applycal(vis=vis,field=field,calwt=False,
                       gaintable=['delays.cal','bandpass.cal',
@@ -611,45 +935,74 @@ def calibrate_sciencetargets(vis='',primarycals=[],secondarycals=[],
                                  'flux.cal'],
                       gainfield=['','','nearest','nearest','nearest'],
                       flagbackup=False)
-    # save flag state
+    #
+    # save the flags
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='calibrate_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='calibrate_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def auto_flag_sciencetargets(vis='',primarycals=[],secondarycals=[],
-                             all_fields=[]):
+def auto_flag_sciencetargets(vis='',science_targets=[]):
     """
-    Perform automatic flagging of science targets using rflag and tfcrop
+    Perform automatic flagging of calibrated science targets using
+    rflag
+
+    Inputs:
+      vis             = measurement set
+      science_targets = list of science targets
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
-    # perform round of automatic flagging
-    field = ','.join([i for i in all_fields if i not in primarycals+secondarycals])
+    #
+    # Perform automatic flagging on science targets
+    #
+    field = ','.join(science_targets)
     datacolumn='corrected'
     logger.info("Running rflag on all correlations...")
     casa.flagdata(vis=vis,mode='rflag',field=field,
                   flagbackup=False,datacolumn=datacolumn,
                   extendflags=False)
     logger.info("Done.")
+    #
+    # Save the flags
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='autoflag_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='autoflag_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def gen_sciencetarget_plots(vis='',primarycals=[],secondarycals=[],
-                            all_fields=[]):
+def gen_sciencetarget_plots(vis='',science_targets=[]):
     """
-    Generate visibility plots for inspection
+    Generate science target visibility plots
+
+    Inputs:
+      vis             = measurement set
+      science_targets = list of science targets
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
     datacolumn='corrected'
-    # generate plots for manual inspection
+    #
+    # Generate the plots
+    #
     logger.info("Generating plots for manual inspection...")
     plotnum=0
     plots = []
-    for field in [i for i in all_fields if i not in primarycals+secondarycals]:
+    for field in science_targets:
+        #
+        # Real vs Imaginary
+        #
         casa.plotms(vis=vis,xaxis='real',yaxis='imag',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -658,6 +1011,9 @@ def gen_sciencetarget_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'real','yaxis':'imag','avgtime':'','avgchannel':''})
         plotnum += 1
+        #
+        # Amplitude vs Time
+        #
         casa.plotms(vis=vis,xaxis='time',yaxis='amp',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -667,6 +1023,9 @@ def gen_sciencetarget_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'time','yaxis':'amp','avgtime':'','avgchannel':'1e7'})
         plotnum += 1
+        #
+        # Amplitude vs Channel
+        #
         casa.plotms(vis=vis,xaxis='channel',yaxis='amp',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
@@ -676,7 +1035,21 @@ def gen_sciencetarget_plots(vis='',primarycals=[],secondarycals=[],
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'channel','yaxis':'amp','avgtime':'1e7','avgchannel':''})
         plotnum += 1
+        #
+        # Amplitude vs UV-distance (in wavelength units)
+        #
+        casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,
+                    ydatacolumn=datacolumn,iteraxis='spw',
+                    coloraxis='baseline',correlation='XX,YY',
+                    title='PlotID: {0} Field: {1}'.format(plotnum,field),
+                    plotfile='scitarg_figures/{0}.png'.format(plotnum),
+                    overwrite=True,showgui=False,exprange='all')
+        plots.append({'field':field,'xaxis':'uvwave','yaxis':'amp','avgtime':'','avgchannel':''})
+        plotnum += 1
     logger.info("Done.")
+    #
+    # Generate PDF to display plots
+    #
     logger.info("Generating tex document...")
     num_plots = plotnum
     iplot = 0
@@ -704,122 +1077,115 @@ def gen_sciencetarget_plots(vis='',primarycals=[],secondarycals=[],
                 iplot+=1
         f.write(r"\end{figure}"+"\n")
         f.write(r"\end{document}"+"\n")
-    os.system('pdflatex scitarg_plots.tex')
+    os.system('pdflatex -interaction=batchmode scitarg_plots.tex')
     logger.info("Done.")
+    #
+    # Save the plot list to the pickle object
+    #
     logger.info("Saving plot list to pickle...")
     with open('scitarg_plots.pkl','w') as f:
         pickle.dump(plots,f)
     logger.info("Done.")
 
-def manual_flag_sciencetargets(vis='',primarycals=[],secondarycals=[],
-                               all_fields=[],auto=False):
+def manual_flag_sciencetargets(vis='',science_targets=[]):
     """
-    manually flag science targets
+    Interactively plot and flag the science targets
+
+    Inputs:
+      vis             = measurement set
+      science_targets = list of science targets
+
+    Returns:
+      Nothing
     """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
     datacolumn='corrected'
+    #
+    # Read plot list from pickle object
+    #
     logger.info("Reading plot list from pickle...")
     with open("scitarg_plots.pkl","r") as f:
         plots = pickle.load(f)
     num_plots = len(plots)
     logger.info("Done.")
+    #
+    # Prompt user with menu
+    #
     logger.info("Please inspect scitarg_plots.pdf then perform manual calibrations.")
     while True:
         print("f - flag some data")
         print("plot id number - generate interactive version of plot with this id")
         print("quit - end this flagging session")
         answer = raw_input()
+        #
+        # Flag some data
+        #
         if answer.lower() == 'f':
-            flag_commands = []
-            while True:
-                print("Field? Empty = all science target fields")
-                field = raw_input()
-                if field == '':
-                    field = ','.join([i for i in all_fields if i not in primarycals+secondarycals])
-                print("Spectral window and channels? Empty = all spws (ex. 2:100~150;200:250,5:1200~1210 is spw 2, chans 100 to 150  and 200 to 250, and spw 5 chans 1200 to 1210)")
-                spw = raw_input()
-                print("Time range? Empty = all times (ex. 10:23:45~10:23:55)")
-                timerange = raw_input()
-                print("Antenna or baseline? Empty = all antennas/baselines (ex. CA01 to flag ant 1 or CA01&CA02 to flag 1-2 baseline)")
-                antenna = raw_input()
-                print("Correlation? Empty = all correlations (XX,YY,XY,YX)")
-                correlation = raw_input()
-                parts = []
-                if len(field) > 0:
-                    parts.append("field='{0}'".format(field))
-                if len(spw) > 0:
-                    parts.append("spw='{0}'".format(spw))
-                if len(timerange) > 0:
-                    parts.append("timerange='{0}'".format(timerange))
-                if len(antenna) > 0:
-                    parts.append("antenna='{0}'".format(antenna))
-                if len(correlation) > 0:
-                    parts.append("correlation='{0}'".format(correlation))
-                flag_commands.append(' '.join(parts))
-                print("Will execute:")
-                print("flagdata(vis='{0}',mode='list',flagbackup=False,extendflags=False,".format(vis))
-                for icmd,cmd in enumerate(flag_commands):
-                    if len(flag_commands) == 1:
-                        print("         inpfile=[\"{0}\"])".format(cmd))
-                    elif icmd == 0:
-                        print("         inpfile=[\"{0}\",".format(cmd))
-                    elif icmd == len(flag_commands)-1:
-                        print("                  \"{0}\"])".format(cmd))
-                    else:
-                        print("                  \"{0}\",".format(cmd))
-                print("Proceed [y/n] or add another flag command [a]?")
-                go = raw_input()
-                if go.lower() == 'y':
-                    logger.info("Executing:")
-                    logger.info("flagdata(vis='{0}',mode='list',flagbackup=False,extendflags=False,".format(vis))
-                    for icmd,cmd in enumerate(flag_commands):
-                        if len(flag_commands) == 1:
-                            logger.info("         inpfile=[\"{0}\"])".format(cmd))
-                        elif icmd == 0:
-                            logger.info("         inpfile=[\"{0}\",".format(cmd))
-                        elif icmd == len(flag_commands)-1:
-                            logger.info("                  \"{0}\"])".format(cmd))
-                        else:
-                            logger.info("                  \"{0}\",".format(cmd))
-                    with open('manual_flags.txt','a') as f:
-                        for cmd in flag_commands:
-                            f.write(strftime('%Y%m%d%H%M%S',gmtime())+': '+cmd+'\n')
-                    casa.flagdata(vis=vis,mode='list',flagbackup=False,extendflags=False,
-                                  inpfile=flag_commands)
-                    break
-                elif go.lower() == 'a':
-                    continue
-                else:
-                    print("Aborting...")
-                    break
+            flag(vis=vis,all_fields=science_targets)
+        #
+        # Stop flagging
+        #
         elif answer.lower() == 'quit':
             break
+        #
+        # Generate plotms figure
+        #
         else:
             try:
                 plotid = int(answer)
             except ValueError:
                 print("Plot ID not valid!")
                 continue
-            if plotid < num_plots:
-                casa.plotms(vis=vis,xaxis=plots[plotid]['xaxis'],yaxis=plots[plotid]['yaxis'],field=plots[plotid]['field'],
-                            ydatacolumn=datacolumn,iteraxis='spw',
-                            coloraxis='baseline',correlation='XX,YY',
-                            title='PlotID: {0} Field: {1}'.format(plotid,plots[plotid]['field']),
-                            avgchannel=plots[plotid]['avgchannel'],avgtime=plots[plotid]['avgtime'])
+            if plotid >= num_plots:
+                print("Plot ID not valid!")
+                continue
+            casa.plotms(vis=vis,xaxis=plots[plotid]['xaxis'],yaxis=plots[plotid]['yaxis'],field=plots[plotid]['field'],
+                        ydatacolumn=datacolumn,iteraxis='spw',
+                        coloraxis='baseline',correlation='XX,YY',
+                        title='PlotID: {0} Field: {1}'.format(plotid,plots[plotid]['field']),
+                        avgchannel=plots[plotid]['avgchannel'],avgtime=plots[plotid]['avgtime'])
+    #
+    # Save the flags
+    #
     logger.info("Saving flag state...")
     casa.flagmanager(vis=vis,mode='save',
-                     versionname='manualflag_{0}'.format(strftime('%Y%m%d%H%M%S',gmtime())))
+                     versionname='manualflag_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def main(vis,project=_DEFAULT_PROJECT,
-         primarycals=_DEFAULT_PRIMARY_CALS,
-         secondarycals=_DEFAULT_SECONDARY_CALS,auto=False):
+def main(vis,config_file,auto=False):
+    """
+    Run the CASA data reduction pipeline
+
+    Inputs:
+      vis         = measurement set
+      config_file = filename of the configuration file for this project
+      auto        = if True, automatically run the pipeline and do not
+                    prompt the user for anything other than the
+                    reference antenna at the start
+
+    Returns:
+      Nothing
+    """
+    #
     # start logger
+    #
     logger = logging.getLogger("main")
+    #
+    # load configuration file
+    #
+    config = ConfigParser.ConfigParser()
+    logger.info("Reading configuration file {0}".format(config_file))
+    config.read(config_file)
+    logger.info("Done.")
+    #
     # initial setup
-    cabb_config,my_cont_spws,my_line_spws,all_fields = \
-        setup(vis=vis,project=project)
+    #
+    my_cont_spws,my_line_spws,flux_cals,primary_cals,secondary_cals,science_targets,refant = \
+      setup(vis=vis,config=config)
+    #
     # if auto, just do automatic routine
     # - Preliminary Flagging
     # - Calibrate and apply to calibrators
@@ -829,46 +1195,35 @@ def main(vis,project=_DEFAULT_PROJECT,
     # - Apply calibrations to science targets
     # - Auto flag science targets
     # - Generate plotms figures for science targets
+    #
     if auto:
-        # preliminary flagging
-        preliminary_flagging(vis=vis,my_line_spws=my_line_spws)
-        # calibrate calibrators
-        calibrate_calibrators(vis=vis,primarycals=primarycals,
-                              secondarycals=secondarycals,
-                              all_fields=all_fields,
+        preliminary_flagging(vis=vis,my_line_spws=my_line_spws,
+                             my_cont_spws=my_cont_spws,config=config)
+        calibrate_calibrators(vis=vis,primary_cals=primary_cals,
+                              secondary_cals=secondary_cals,
+                              flux_cals=flux_cals,
                               my_line_spws=my_line_spws,
-                              my_cont_spws=my_cont_spws)
-        # auto flag calibrators
-        auto_flag_calibrators(vis=vis,primarycals=primarycals,
-                              secondarycals=secondarycals,
-                              all_fields=all_fields)
-        # re-calibrate calibrators
-        calibrate_calibrators(vis=vis,primarycals=primarycals,
-                              secondarycals=secondarycals,
-                              all_fields=all_fields,
+                              my_cont_spws=my_cont_spws,
+                              refant=refant,config=config)
+        auto_flag_calibrators(vis=vis,primary_cals=primary_cals,
+                              secondary_cals=secondary_cals)
+        calibrate_calibrators(vis=vis,primary_cals=primary_cals,
+                              secondary_cals=secondary_cals,
+                              flux_cals=flux_cals,
                               my_line_spws=my_line_spws,
-                              my_cont_spws=my_cont_spws)
-        # generate calibrator plots
-        gen_calibrator_plots(vis=vis,primarycals=primarycals,
-                             secondarycals=secondarycals,
-                             all_fields=all_fields)
-        # apply calibration solutions to science targets
-        calibrate_sciencetargets(vis=vis,primarycals=primarycals,
-                                 secondarycals=secondarycals,
-                                 all_fields=all_fields)
-        # auto-flag the science targets
-        auto_flag_sciencetargets(vis=vis,
-                                 primarycals=primarycals,
-                                 secondarycals=secondarycals,
-                                 all_fields=all_fields)
-        # generate science target plots
-        gen_sciencetarget_plots(vis=vis,primarycals=primarycals,
-                                secondarycals=secondarycals,
-                                all_fields=all_fields)
+                              my_cont_spws=my_cont_spws,
+                              refant=refant,config=config)
+        gen_calibrator_plots(vis=vis,primary_cals=primary_cals,
+                             secondary_cals=secondary_cals)
+        calibrate_sciencetargets(vis=vis,science_targets=science_targets)
+        auto_flag_sciencetargets(vis=vis,science_targets=science_targets)
+        gen_sciencetarget_plots(vis=vis,science_targets=science_targets)
         return
-    # menu items
+    #
+    # Prompt the user with a menu for each option
+    #
     while True:
-        print("0. Flag antenna 6, birdies, qvack, shadowed antennas, tfcrop (auto-flag) all fields")
+        print("0. Flag from configuration file, qvack, shadowed antennas, and tfcrop (auto-flag) all fields")
         print("1. Auto-flag calibrators")
         print("2. Generate plotms figures for calibrators")
         print("3. Manually flag calibrators")
@@ -880,51 +1235,32 @@ def main(vis,project=_DEFAULT_PROJECT,
         print("q [quit]")
         answer = raw_input("SHRDS> ")
         if answer == '0':
-            # preliminary flagging
-            preliminary_flagging(vis=vis,my_line_spws=my_line_spws)
+            preliminary_flagging(vis=vis,my_line_spws=my_line_spws,
+                                 my_cont_spws=my_cont_spws,config=config)
         elif answer == '1':
-            # auto flag calibrators
-            auto_flag_calibrators(vis=vis,primarycals=primarycals,
-                                  secondarycals=secondarycals,
-                                  all_fields=all_fields)
+            auto_flag_calibrators(vis=vis,primary_cals=primary_cals,
+                                  secondary_cals=secondary_cals)            
         elif answer == '2':
-            # generate calibrator plots
-            gen_calibrator_plots(vis=vis,primarycals=primarycals,
-                                 secondarycals=secondarycals,
-                                 all_fields=all_fields)
+            gen_calibrator_plots(vis=vis,primary_cals=primary_cals,
+                                 secondary_cals=secondary_cals)
         elif answer == '3':
-            # manually flag calibrators
-            manual_flag_calibrators(vis=vis,primarycals=primarycals,
-                                    secondarycals=secondarycals,
-                                    all_fields=all_fields)
+            manual_flag_calibrators(vis=vis,primary_cals=primary_cals,
+                                    secondary_cals=secondary_cals)
         elif answer == '4':
-            # calibrate calibrators
-            calibrate_calibrators(vis=vis,primarycals=primarycals,
-                                  secondarycals=secondarycals,
-                                  all_fields=all_fields,
+            calibrate_calibrators(vis=vis,primary_cals=primary_cals,
+                                  secondary_cals=secondary_cals,
+                                  flux_cals=flux_cals,
                                   my_line_spws=my_line_spws,
-                                  my_cont_spws=my_cont_spws)
+                                  my_cont_spws=my_cont_spws,
+                                  refant=refant,config=config)
         elif answer == '5':
-            # apply calibration solutions to science targets
-            calibrate_sciencetargets(vis=vis,primarycals=primarycals,
-                                   secondarycals=secondarycals,
-                                   all_fields=all_fields)
+            calibrate_sciencetargets(vis=vis,science_targets=science_targets)
         elif answer == '6':
-            # auto-flag the science targets
-            auto_flag_sciencetargets(vis=vis,
-                                     primarycals=primarycals,
-                                     secondarycals=secondarycals,
-                                     all_fields=all_fields)
+            auto_flag_sciencetargets(vis=vis,science_targets=science_targets)
         elif answer == '7':
-            # generate science target plots
-            gen_sciencetarget_plots(vis=vis,primarycals=primarycals,
-                                    secondarycals=secondarycals,
-                                    all_fields=all_fields)
+            gen_sciencetarget_plots(vis=vis,science_targets=science_targets)
         elif answer == '8':
-            # manually flag science targets
-            manual_flag_sciencetargets(vis=vis,primarycals=primarycals,
-                                    secondarycals=secondarycals,
-                                    all_fields=all_fields)
+            manual_flag_sciencetargets(vis=vis,science_targets=science_targets)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break
         else:
