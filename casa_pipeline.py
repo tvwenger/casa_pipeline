@@ -424,17 +424,17 @@ def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[]):
     plots = []
     for field in primary_cals+secondary_cals:
         #
-        # Real vs Imaginary
+        # Amplitude vs UV-distance (in wavelength units)
         #
-        casa.plotms(vis=vis,xaxis='real',yaxis='imag',field=field,
+        casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
                     title='PlotID: {0} Field: {1}'.format(plotnum,field),
                     plotfile='calib_figures/{0}.png'.format(plotnum),
                     overwrite=True,showgui=False,exprange='all')
-        plots.append({'field':field,'xaxis':'real','yaxis':'imag','avgtime':'','avgchannel':''})
+        plots.append({'field':field,'xaxis':'uvwave','yaxis':'amp','avgtime':'','avgchannel':''})
         plotnum += 1
-        #
+         #
         # Amplitude vs Time
         #
         casa.plotms(vis=vis,xaxis='time',yaxis='amp',field=field,
@@ -482,18 +482,7 @@ def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[]):
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'channel','yaxis':'phase','avgtime':'1e7','avgchannel':''})
         plotnum += 1
-        #
-        # Amplitude vs UV-distance (in wavelength units)
-        #
-        casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,
-                    ydatacolumn=datacolumn,iteraxis='spw',
-                    coloraxis='baseline',correlation='XX,YY',
-                    title='PlotID: {0} Field: {1}'.format(plotnum,field),
-                    plotfile='calib_figures/{0}.png'.format(plotnum),
-                    overwrite=True,showgui=False,exprange='all')
-        plots.append({'field':field,'xaxis':'uvwave','yaxis':'amp','avgtime':'','avgchannel':''})
-        plotnum += 1
-    logger.info("Done.")
+   logger.info("Done.")
     #
     # Generate PDF to display plots
     #
@@ -1001,15 +990,15 @@ def gen_sciencetarget_plots(vis='',science_targets=[]):
     plots = []
     for field in science_targets:
         #
-        # Real vs Imaginary
+        # Amplitude vs UV-distance (in wavelength units)
         #
-        casa.plotms(vis=vis,xaxis='real',yaxis='imag',field=field,
+        casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,
                     ydatacolumn=datacolumn,iteraxis='spw',
                     coloraxis='baseline',correlation='XX,YY',
                     title='PlotID: {0} Field: {1}'.format(plotnum,field),
                     plotfile='scitarg_figures/{0}.png'.format(plotnum),
                     overwrite=True,showgui=False,exprange='all')
-        plots.append({'field':field,'xaxis':'real','yaxis':'imag','avgtime':'','avgchannel':''})
+        plots.append({'field':field,'xaxis':'uvwave','yaxis':'amp','avgtime':'','avgchannel':''})
         plotnum += 1
         #
         # Amplitude vs Time
@@ -1034,17 +1023,6 @@ def gen_sciencetarget_plots(vis='',science_targets=[]):
                     plotfile='scitarg_figures/{0}.png'.format(plotnum),
                     overwrite=True,showgui=False,exprange='all')
         plots.append({'field':field,'xaxis':'channel','yaxis':'amp','avgtime':'1e7','avgchannel':''})
-        plotnum += 1
-        #
-        # Amplitude vs UV-distance (in wavelength units)
-        #
-        casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,
-                    ydatacolumn=datacolumn,iteraxis='spw',
-                    coloraxis='baseline',correlation='XX,YY',
-                    title='PlotID: {0} Field: {1}'.format(plotnum,field),
-                    plotfile='scitarg_figures/{0}.png'.format(plotnum),
-                    overwrite=True,showgui=False,exprange='all')
-        plots.append({'field':field,'xaxis':'uvwave','yaxis':'amp','avgtime':'','avgchannel':''})
         plotnum += 1
     logger.info("Done.")
     #
@@ -1197,6 +1175,7 @@ def main(vis,config_file,auto=False):
     # - Generate plotms figures for science targets
     #
     if auto:
+        start_time = time.time()
         preliminary_flagging(vis=vis,my_line_spws=my_line_spws,
                              my_cont_spws=my_cont_spws,config=config)
         calibrate_calibrators(vis=vis,primary_cals=primary_cals,
@@ -1218,6 +1197,11 @@ def main(vis,config_file,auto=False):
         calibrate_sciencetargets(vis=vis,science_targets=science_targets)
         auto_flag_sciencetargets(vis=vis,science_targets=science_targets)
         gen_sciencetarget_plots(vis=vis,science_targets=science_targets)
+        run_time = time.time() - start_time
+        hrs = int(run_time/3600.)
+        mins = int((run_time-3600.*hrs)/60.)
+        secs = run_time-3600.*hrs-60.*mins
+        print("Runtime: {0:02}h {1:02}m {2:02.2f}s".format(hrs,mins,secs))
         return
     #
     # Prompt the user with a menu for each option
