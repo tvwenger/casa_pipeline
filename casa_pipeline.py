@@ -473,7 +473,7 @@ def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[],
         f.write(r"\begin{document}"+"\n")
         f.write(r"\begin{figure}"+"\n")
         f.write(r"\centering"+"\n")
-        for plotnum in range(num_plots-1):
+        for plotnum in range(num_plots):
             fnames=glob.glob("calib_figures/{0}_*.png".format(plotnum))
             fnames = natural_sort(fnames)
             for fname in fnames:
@@ -1048,7 +1048,7 @@ def gen_sciencetarget_plots(vis='',science_targets=[],config=None):
         f.write(r"\begin{document}"+"\n")
         f.write(r"\begin{figure}"+"\n")
         f.write(r"\centering"+"\n")
-        for plotnum in range(num_plots-1):
+        for plotnum in range(num_plots):
             fnames=glob.glob("scitarg_figures/{0}_*.png".format(plotnum))
             fnames = natural_sort(fnames)
             for fname in fnames:
