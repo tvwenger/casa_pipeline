@@ -1,23 +1,7 @@
 """
-casa_pipeline.py
-SHRDS ATCA Data Reduction Pipeline - CASA version
-Trey V. Wenger 2015     - V1.0
-Trey V. Wenger Jun 2016 - V1.1
-               moved plot generation to separate functions
-               added logger
-               fixed bug in flagging function that looped you back
-               in to a new flagging prompt after applying the flags
-               add timestamp to preliminary flagging backup save file
-               changed auto-flag process. Use tfcrop on uncalibrated
-               data, then calibrate, then use rflag, then generate plots
-               DO NOT extend the flags - this deletes entire sources
-               if the online flags already flagged too much data.
-Trey V. Wenger Jun 2016 - V2.0
-               added options for configuration file to
-               define things like the number of line channels
-               and number of continuum channels, as well as number
-               of channels to average for calibration steps, general
-               cleaning of code and reorganization
+calibration.py
+CASA Data Reduction Pipeline - Calibration Script
+Trey V. Wenger Jun 2016 - V1.0
 """
 
 import __main__ as casa
@@ -31,14 +15,14 @@ import logging
 import logging.config
 import ConfigParser
 
-__VERSION__ = "2.0"
+__VERSION__ = "1.0"
 
 # load logging configuration file
 logging.config.fileConfig('logging.conf')
 
 def natural_sort(l):
     """
-    Natural sort an alphanumeric list l
+    Natural sort an alphanumeric list
 
     Inputs:
       l        = alphanumeric list to be sorted
@@ -1149,6 +1133,31 @@ def manual_flag_sciencetargets(vis='',science_targets=[],config=None):
                      versionname='manualflag_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
+def split_fields(vis='',primary_cals=[],secondary_cals=[],science_targets=[]):
+    """
+    Split calibrated fields into own measurement sets with naming format:
+    {field_name}_calibrated.ms
+
+    Inputs:
+      vis             = measurement set
+      primary_cals    = list of primary calibrators
+      secondary_cals  = list of secondary calibrators
+      science_targets = list of science targets
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    logger.info("Splitting fields...")
+    for field in primary_cals+secondary_cals+science_targets:
+        outputvis = '{0}_calibrated.ms'.format(field)
+        logger.info("Splitting {0} to {1}".format(field,outputvis))
+        casa.split(vis=vis,outputvis=outputvis,field=field,keepflags=False)
+    logger.info("Done!")
+
 def main(vis='',config_file='',auto=False):
     """
     Run the CASA data reduction pipeline
@@ -1243,6 +1252,7 @@ def main(vis='',config_file='',auto=False):
         print("6. Auto-flag science targets")
         print("7. Generate plotms figures for science targets")
         print("8. Manually flag science targets")
+        print("9. Split calibrated fields")
         print("q [quit]")
         answer = raw_input("SHRDS> ")
         if answer == '0':
@@ -1276,6 +1286,9 @@ def main(vis='',config_file='',auto=False):
         elif answer == '8':
             manual_flag_sciencetargets(vis=vis,science_targets=science_targets,
                                        config=config)
+        elif answer == '8':
+            split_fields(vis=vis,primary_cals=primary_cals,secondary_cals=secondary_cals,
+                         science_targets=science_targets)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break
         else:
