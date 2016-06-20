@@ -1133,31 +1133,6 @@ def manual_flag_sciencetargets(vis='',science_targets=[],config=None):
                      versionname='manualflag_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
     logger.info("Done.")
 
-def split_fields(vis='',primary_cals=[],secondary_cals=[],science_targets=[]):
-    """
-    Split calibrated fields into own measurement sets with naming format:
-    {field_name}_calibrated.ms
-
-    Inputs:
-      vis             = measurement set
-      primary_cals    = list of primary calibrators
-      secondary_cals  = list of secondary calibrators
-      science_targets = list of science targets
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    logger.info("Splitting fields...")
-    for field in primary_cals+secondary_cals+science_targets:
-        outputvis = '{0}_calibrated.ms'.format(field)
-        logger.info("Splitting {0} to {1}".format(field,outputvis))
-        casa.split(vis=vis,outputvis=outputvis,field=field,keepflags=False)
-    logger.info("Done!")
-
 def main(vis='',config_file='',auto=False):
     """
     Run the CASA data reduction pipeline
@@ -1252,7 +1227,6 @@ def main(vis='',config_file='',auto=False):
         print("6. Auto-flag science targets")
         print("7. Generate plotms figures for science targets")
         print("8. Manually flag science targets")
-        print("9. Split calibrated fields")
         print("q [quit]")
         answer = raw_input("SHRDS> ")
         if answer == '0':
@@ -1286,9 +1260,6 @@ def main(vis='',config_file='',auto=False):
         elif answer == '8':
             manual_flag_sciencetargets(vis=vis,science_targets=science_targets,
                                        config=config)
-        elif answer == '8':
-            split_fields(vis=vis,primary_cals=primary_cals,secondary_cals=secondary_cals,
-                         science_targets=science_targets)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break
         else:
