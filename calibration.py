@@ -1254,7 +1254,7 @@ def main(vis='',config_file='',auto=False):
         print("8. Manually flag science targets")
         print("9. Split calibrated fields")
         print("q [quit]")
-        answer = raw_input("SHRDS> ")
+        answer = raw_input("> ")
         if answer == '0':
             preliminary_flagging(vis=vis,my_line_spws=my_line_spws,
                                  my_cont_spws=my_cont_spws,config=config)
