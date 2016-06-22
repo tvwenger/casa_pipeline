@@ -58,6 +58,8 @@ def setup(config=None):
     weighting = config.get("Clean","weighting")
     robust = config.getfloat("Clean","robust")
     multiscale = [int(foo) for foo in config.get("Clean","multiscale").split(',') if foo != '']
+    gain = config.getfloat("Clean","gain")
+    cyclefactor = config.getfloat("Clean","cyclefactor")
     velstart = config.get("Clean","velstart")
     chanwidth = config.get("Clean","chanwidth")
     nchan = config.getint("Clean","nchan")
@@ -65,17 +67,18 @@ def setup(config=None):
     veltype = config.get("Clean","veltype")
     clean_params = {"lineids":lineids,"restfreqs":restfreqs,"imsize":imsize,
                     "cell":cell,"weighting":weighting,"robust":robust,
-                    "multiscale":multiscale,"velstart":velstart,"chanwidth":chanwidth,
+                    "multiscale":multiscale,"gain":gain,"cyclefactor":cyclefactor,
+                    "velstart":velstart,"chanwidth":chanwidth,
                     "nchan":nchan,"outframe":outframe,"veltype":veltype}
     return (my_cont_spws,my_line_spws,clean_params)
 
-def clean_cont(field='',vises=[],my_cont_spws='',clean_params={}):
+def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     """
     Clean continuum spws
 
     Inputs:
       field        = field to be cleaned
-      vises        = list of measurement sets to combine
+      vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
 
@@ -91,9 +94,10 @@ def clean_cont(field='',vises=[],my_cont_spws='',clean_params={}):
     #
     imagename='{0}.cont.clean'.format(field)
     logger.info("Cleaning continuum...")
-    casa.clean(vis=vises,imagename=imagename,field=field,spw=my_cont_spws,
+    casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=10000,interactive=True,
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
+               gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'])
     logger.info("Done.")
@@ -106,13 +110,13 @@ def clean_cont(field='',vises=[],my_cont_spws='',clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
-def dirty_line(field='',vises=[],my_line_spws='',clean_params={}):
+def dirty_line(field='',vis='',my_line_spws='',clean_params={}):
     """
     Dirty image line spws
 
     Inputs:
       field        = field to be imaged
-      vises        = list of measurement sets to combine
+      vis          = measurement set
       my_line_spws = comma-separated string of line spws
       clean_params = dictionary of clean parameters
 
@@ -129,20 +133,21 @@ def dirty_line(field='',vises=[],my_line_spws='',clean_params={}):
     for spw in my_line_spws.split(','):
         imagename='{0}.spw{1}.dirty'.format(field,spw)
         logger.info("Dirty imaging spw {0}...".format(spw))
-        casa.clean(vis=vises,imagename=imagename,field=field,spw=spw,
+        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                    threshold='0mJy',niter=0,interactive=False,
                    imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'])
         logger.info("Done.")
 
-def clean_first_line(field='',vises=[],my_line_spws='',clean_params={}):
+def clean_first_line(field='',vis='',my_line_spws='',clean_params={}):
     """
     Clean first line spw to get clean threshold
 
     Inputs:
       field        = field to be imaged
-      vises        = list of measurement sets to combine
+      vis          = measurement set
       my_line_spws = comma-separated string of line spws
       clean_params = dictionary of clean parameters
 
@@ -167,9 +172,10 @@ def clean_first_line(field='',vises=[],my_line_spws='',clean_params={}):
     #
     imagename='{0}.spw{1}.clean'.format(field,spw)
     logger.info("Cleaning spw {0}...".format(spw))
-    casa.clean(vis=vises,imagename=imagename,field=field,spw=spw,
+    casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                threshold='0mJy',niter=10000,interactive=True,mask=mask,
                imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+               gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
                nchan=clean_params['nchan'],start=clean_params['velstart'],
@@ -177,13 +183,13 @@ def clean_first_line(field='',vises=[],my_line_spws='',clean_params={}):
                outframe=clean_params['outframe'],veltype=clean_params['veltype'])
     logger.info("Done.")
 
-def clean_line(field='',vises=[],my_line_spws='',clean_params={},threshold=''):
+def clean_line(field='',vis='',my_line_spws='',clean_params={},threshold=''):
     """
     Clean all line spws non-interactively
 
     Inputs:
       field        = field to be imaged
-      vises        = list of measurement sets to combine
+      vis          = measurement set
       my_line_spws = comma-separated string of line spws
       clean_params = dictionary of clean parameters
       threshold    = clean threshold
@@ -208,9 +214,10 @@ def clean_line(field='',vises=[],my_line_spws='',clean_params={},threshold=''):
         #
         imagename='{0}.spw{1}.clean'.format(field,spw)
         logger.info("Cleaning spw {0}...".format(spw))
-        casa.clean(vis=vises,imagename=imagename,field=field,spw=spw,
+        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                    threshold=threshold,niter=10000,interactive=False,mask=mask,
                    imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
                    nchan=clean_params['nchan'],start=clean_params['velstart'],
@@ -226,14 +233,13 @@ def clean_line(field='',vises=[],my_line_spws='',clean_params={},threshold=''):
                      outfile='{0}.pbcor'.format(imagename))
         logger.info("Done.")
 
-def main(field,vises=[],config_file=''):
+def main(field,vis='',config_file=''):
     """
     Combine, image, and clean a field
 
     Inputs:
       field       = field name to clean
-      vises       = list of measurement sets from which to collect data for this
-                    source
+      vis         = measurement set containing all data for field
       config_file = filename of the configuration file for this project
 
     Returns:
@@ -246,9 +252,6 @@ def main(field,vises=[],config_file=''):
     #
     # Check inputs
     #
-    if len(vises) == 0:
-        logger.critical('Must supply vises containing calibrated measurement sets!')
-        raise ValueError('Must supply vises containing measurement sets')
     if not os.path.exists(config_file):
         logger.critical('Configuration file not found')
         raise ValueError('Configuration file not found!')
@@ -276,13 +279,13 @@ def main(field,vises=[],config_file=''):
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
-            clean_cont(field=field,vises=vises,my_cont_spws=my_cont_spws,clean_params=clean_params)
+            clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
         elif answer == '1':
-            dirty_line(field=field,vises=vises,my_line_spws=my_line_spws,clean_params=clean_params)
+            dirty_line(field=field,vis=vis,my_line_spws=my_line_spws,clean_params=clean_params)
             print("Please open each dirty image in the CASA viewer and define a clean region.")
             print("Save the CASA region in a file with name {field}.spw{spw_number}.reg")
         elif answer == '2':
-            clean_first_line(field=field,vises=vises,my_line_spws=my_line_spws,clean_params=clean_params)
+            clean_first_line(field=field,vis=vis,my_line_spws=my_line_spws,clean_params=clean_params)
         elif answer == '3':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
@@ -290,7 +293,7 @@ def main(field,vises=[],config_file=''):
             if threshold is None:
                 logger.warn("Must set threshold first!")
             else:
-                clean_line(field=field,vises=vises,my_line_spws=my_line_spws,clean_params=clean_params,
+                clean_line(field=field,vis=vis,my_line_spws=my_line_spws,clean_params=clean_params,
                            threshold=threshold)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break

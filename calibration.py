@@ -1286,7 +1286,7 @@ def main(vis='',config_file='',auto=False):
         elif answer == '8':
             manual_flag_sciencetargets(vis=vis,science_targets=science_targets,
                                        config=config)
-        elif answer == '8':
+        elif answer == '9':
             split_fields(vis=vis,primary_cals=primary_cals,secondary_cals=secondary_cals,
                          science_targets=science_targets)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
