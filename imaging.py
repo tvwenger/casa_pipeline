@@ -11,6 +11,7 @@ import glob
 import logging
 import logging.config
 import ConfigParser
+import shutil
 
 __VERSION__ = "1.0"
 
@@ -110,45 +111,17 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
-def dirty_line(field='',vis='',my_line_spws='',clean_params={}):
-    """
-    Dirty image line spws
-
-    Inputs:
-      field        = field to be imaged
-      vis          = measurement set
-      my_line_spws = comma-separated string of line spws
-      clean_params = dictionary of clean parameters
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    #
-    # Dirty image each spw
-    #
-    for spw in my_line_spws.split(','):
-        imagename='{0}.spw{1}.dirty'.format(field,spw)
-        logger.info("Dirty imaging spw {0}...".format(spw))
-        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-                   threshold='0mJy',niter=0,interactive=False,
-                   imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
-                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
-                   imsize=clean_params['imsize'],cell=clean_params['cell'],
-                   weighting=clean_params['weighting'],robust=clean_params['robust'])
-        logger.info("Done.")
-
-def clean_first_line(field='',vis='',my_line_spws='',clean_params={}):
+def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
+                      clean_params={}):
     """
     Clean first line spw to get clean threshold
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
-      my_line_spws = comma-separated string of line spws
+      spw          = spw to clean
+      spws         = list of other spws being cleaned
+      my_line_spws = comma-separated string of all line spws
       clean_params = dictionary of clean parameters
 
     Returns:
@@ -159,21 +132,17 @@ def clean_first_line(field='',vis='',my_line_spws='',clean_params={}):
     #
     logger = logging.getLogger("main")
     #
-    # Check that region file exists
+    # Get restfreq
     #
-    spw = my_line_spws.split(',')[0]
-    restfreq = clean_params['restfreqs'][0]
-    mask='{0}.spw{1}.reg'.format(field,spw)
-    if not os.path.exists(mask):
-        logger.critical("Region file does not exist: {0}".format(mask))
-        raise ValueError("Region file does not exist: {0}".format(mask))
+    spw_ind = my_line_spws.split(',').index(spw)
+    restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
     #
     # clean spw
     #
     imagename='{0}.spw{1}.clean'.format(field,spw)
-    logger.info("Cleaning spw {0}...".format(spw))
+    logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
     casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-               threshold='0mJy',niter=10000,interactive=True,mask=mask,
+               threshold='0mJy',niter=10000,interactive=True,
                imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -182,14 +151,27 @@ def clean_first_line(field='',vis='',my_line_spws='',clean_params={}):
                width=clean_params['chanwidth'],restfreq=restfreq,
                outframe=clean_params['outframe'],veltype=clean_params['veltype'])
     logger.info("Done.")
+    #
+    # Copy clean mask to other spws being cleaned
+    #
+    logger.info("Copying clean mask from spw {0} to spws {1}".format(spw,spws))
+    oldmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
+    for my_spw in spws:
+        if my_spw == spw:
+            continue
+        newmaskfile = '{0}.spw{1}.clean.mask'.format(field,my_spw)
+        shutil.copytree(oldmaskfile,newmaskfile)
+    logger.info("Done!")
 
-def clean_line(field='',vis='',my_line_spws='',clean_params={},threshold=''):
+def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
+                    clean_params={},threshold=''):
     """
     Clean all line spws non-interactively
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
+      spws         = list of spws to be cleaned
       my_line_spws = comma-separated string of line spws
       clean_params = dictionary of clean parameters
       threshold    = clean threshold
@@ -201,21 +183,19 @@ def clean_line(field='',vis='',my_line_spws='',clean_params={},threshold=''):
     # start logger
     #
     logger = logging.getLogger("main")
-    #
-    # Check that region file exists
-    #
-    for spw,restfreq in zip(my_line_spws.split(','),clean_params['restfreqs']):
-        mask='{0}.spw{1}.reg'.format(field,spw)
-        if not os.path.exists(mask):
-            logger.critical("Region file does not exist: {0}".format(mask))
-            raise ValueError("Region file does not exist: {0}".format(mask))
+    for spw in spws:
+        #
+        # Get restfreq
+        #
+        spw_ind = my_line_spws.split(',').index(spw)
+        restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         #
         # clean spw
         #
         imagename='{0}.spw{1}.clean'.format(field,spw)
-        logger.info("Cleaning spw {0}...".format(spw))
+        logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-                   threshold=threshold,niter=10000,interactive=False,mask=mask,
+                   threshold=threshold,niter=10000,interactive=False,
                    imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -233,13 +213,14 @@ def clean_line(field='',vis='',my_line_spws='',clean_params={},threshold=''):
                      outfile='{0}.pbcor'.format(imagename))
         logger.info("Done.")
 
-def main(field,vis='',config_file=''):
+def main(field,vis='',spws=[],config_file=''):
     """
     Combine, image, and clean a field
 
     Inputs:
       field       = field name to clean
       vis         = measurement set containing all data for field
+      spws        = spectral windows to image
       config_file = filename of the configuration file for this project
 
     Returns:
@@ -272,29 +253,30 @@ def main(field,vis='',config_file=''):
     #
     while True:
         print("0. Manually clean continuum image")
-        print("1. Dirty image line spectral windows")
-        print("2. Manually clean first line spectral window")
-        print("3. Set line spectral window clean threshold")
-        print("4. Automatically clean line spectral windows")
+        print("1. Manually clean a line spectral window, copy clean mask to other spws")
+        print("2. Set line spectral window clean threshold")
+        print("3. Automatically clean line spectral windows")
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
             clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
         elif answer == '1':
-            dirty_line(field=field,vis=vis,my_line_spws=my_line_spws,clean_params=clean_params)
-            print("Please open each dirty image in the CASA viewer and define a clean region.")
-            print("Save the CASA region in a file with name {field}.spw{spw_number}.reg")
+            print("Which spw do you want to clean?")
+            spw = raw_input('> ')
+            manual_clean_line(field=field,vis=vis,spw=spw,spws=spws,
+                              my_line_spws=my_line_spws,
+                              clean_params=clean_params)
         elif answer == '2':
-            clean_first_line(field=field,vis=vis,my_line_spws=my_line_spws,clean_params=clean_params)
-        elif answer == '3':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
-        elif answer == '4':
+        elif answer == '3':
             if threshold is None:
                 logger.warn("Must set threshold first!")
             else:
-                clean_line(field=field,vis=vis,my_line_spws=my_line_spws,clean_params=clean_params,
-                           threshold=threshold)
+                auto_clean_line(field=field,vis=vis,spws=spws,
+                                my_line_spws=my_line_spws,
+                                clean_params=clean_params,
+                                threshold=threshold)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break
         else:
