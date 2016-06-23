@@ -100,7 +100,8 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
-               weighting=clean_params['weighting'],robust=clean_params['robust'])
+               weighting=clean_params['weighting'],robust=clean_params['robust'],
+               usescratch=True)
     logger.info("Done.")
     #
     # Primary beam correction
@@ -112,7 +113,7 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Done.")
 
 def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
-                      clean_params={}):
+                      clean_params={},config=None):
     """
     Clean first line spw to get clean threshold
 
@@ -123,6 +124,7 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
       spws         = list of other spws being cleaned
       my_line_spws = comma-separated string of all line spws
       clean_params = dictionary of clean parameters
+      config       = ConfigParser object for this project
 
     Returns:
       Nothing
@@ -131,6 +133,12 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
     # start logger
     #
     logger = logging.getLogger("main")
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None") 
     #
     # Get restfreq
     #
@@ -149,7 +157,8 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
                weighting=clean_params['weighting'],robust=clean_params['robust'],
                nchan=clean_params['nchan'],start=clean_params['velstart'],
                width=clean_params['chanwidth'],restfreq=restfreq,
-               outframe=clean_params['outframe'],veltype=clean_params['veltype'])
+               outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+               usescratch=True)
     logger.info("Done.")
     #
     # Copy clean mask to other spws being cleaned
@@ -164,7 +173,7 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
     logger.info("Done!")
 
 def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
-                    clean_params={},threshold=''):
+                    clean_params={},threshold='',config=None):
     """
     Clean all line spws non-interactively
 
@@ -175,6 +184,7 @@ def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
       my_line_spws = comma-separated string of line spws
       clean_params = dictionary of clean parameters
       threshold    = clean threshold
+      config       = ConfigParser object for this project
 
     Returns:
       Nothing
@@ -183,6 +193,12 @@ def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
     # start logger
     #
     logger = logging.getLogger("main")
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None") 
     for spw in spws:
         #
         # Get restfreq
@@ -202,7 +218,8 @@ def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
                    nchan=clean_params['nchan'],start=clean_params['velstart'],
                    width=clean_params['chanwidth'],restfreq=restfreq,
-                   outframe=clean_params['outframe'],veltype=clean_params['veltype'])
+                   outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   usescratch=True)
         logger.info("Done.")
         #
         # Primary beam correction
@@ -265,7 +282,7 @@ def main(field,vis='',spws=[],config_file=''):
             spw = raw_input('> ')
             manual_clean_line(field=field,vis=vis,spw=spw,spws=spws,
                               my_line_spws=my_line_spws,
-                              clean_params=clean_params)
+                              clean_params=clean_params,config=config)
         elif answer == '2':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
@@ -276,7 +293,7 @@ def main(field,vis='',spws=[],config_file=''):
                 auto_clean_line(field=field,vis=vis,spws=spws,
                                 my_line_spws=my_line_spws,
                                 clean_params=clean_params,
-                                threshold=threshold)
+                                threshold=threshold,config=config)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break
         else:
