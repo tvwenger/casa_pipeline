@@ -176,28 +176,29 @@ def dirty_clean_line(field='',vis='',spws=[],my_line_spws='',
     #
     if config is None:
         logger.critical("Error: Need to supply a config")
-        raise ValueError("Config is None") 
-    #
-    # Get restfreq
-    #
-    spw_ind = my_line_spws.split(',').index(spw)
-    restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
-    #
-    # clean spw
-    #
-    imagename='{0}.spw{1}.dirty'.format(field,spw)
-    logger.info("Dirty imaging spw {0} (restfreq: {1})...".format(spw,restfreq))
-    casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-               threshold='0mJy',niter=0,interactive=False,
-               imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
-               gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
-               imsize=clean_params['imsize'],cell=clean_params['cell'],
-               weighting=clean_params['weighting'],robust=clean_params['robust'],
-               nchan=clean_params['nchan'],start=clean_params['velstart'],
-               width=clean_params['chanwidth'],restfreq=restfreq,
-               outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-               usescratch=True)
-    logger.info("Done.")
+        raise ValueError("Config is None")
+    for spw in spws:
+        #
+        # Get restfreq
+        #
+        spw_ind = my_line_spws.split(',').index(spw)
+        restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
+        #
+        # clean spw
+        #
+        imagename='{0}.spw{1}.dirty'.format(field,spw)
+        logger.info("Dirty imaging spw {0} (restfreq: {1})...".format(spw,restfreq))
+        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
+                threshold='0mJy',niter=0,interactive=False,
+                imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                imsize=clean_params['imsize'],cell=clean_params['cell'],
+                weighting=clean_params['weighting'],robust=clean_params['robust'],
+                nchan=clean_params['nchan'],start=clean_params['velstart'],
+                width=clean_params['chanwidth'],restfreq=restfreq,
+                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                usescratch=True)
+        logger.info("Done.")
     #
     # Copy clean mask to other spws being cleaned
     #
