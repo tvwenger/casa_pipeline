@@ -73,7 +73,7 @@ def setup(config=None):
                     "nchan":nchan,"outframe":outframe,"veltype":veltype}
     return (my_cont_spws,my_line_spws,clean_params)
 
-def mfs_cont(field='',vis='',my_cont_spws='',clean_params={}):
+def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     """
     Clean continuum spws using multi-frequency synthesis
 
@@ -112,7 +112,7 @@ def mfs_cont(field='',vis='',my_cont_spws='',clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
-def mfs_line(field='',vis='',spws=[],clean_params={}):
+def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
     """
     Clean line spws using multi-frequency synthesis
 
