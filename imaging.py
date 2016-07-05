@@ -94,7 +94,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     # Clean continuum
     #
     imagename='{0}.cont.clean'.format(field)
-    logger.info("Cleaning continuum...")
+    logger.info("MFS cleaning continuum...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=10000,interactive=True,
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
@@ -133,7 +133,7 @@ def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
     # Clean line
     #
     imagename='{0}.spws_{1}.cont.clean'.format(field,'_'.join(spws))
-    logger.info("Cleaning continuum...")
+    logger.info("MFS cleaning line spws...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=','.join(spws),
                threshold='0mJy',niter=10000,interactive=True,
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
@@ -154,7 +154,7 @@ def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
     # Copy clean mask to other spws being cleaned
     #
     logger.info("Copying clean mask to spws {1}".format(spws))
-    oldmaskfile = '{0}.mask'.format(imagename,spw)
+    oldmaskfile = '{0}.mask'.format(imagename)
     for spw in spws:
         newmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
         shutil.copytree(oldmaskfile,newmaskfile)
