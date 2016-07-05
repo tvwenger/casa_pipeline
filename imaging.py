@@ -203,7 +203,7 @@ def dirty_clean_line(field='',vis='',spws=[],my_line_spws='',
     # Copy clean mask to other spws being cleaned
     #
     oldmaskfile = '{0}.spws_{1}.cont.clean.mask'.format(field,'_'.join(spws))
-    for spw in spws
+    for spw in spws:
         logger.info("Copying clean mask to spw {0}".format(spw))
         newmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
         casa.makemask(mode='expand',inpimage='{0}.image'.format(imagename),
