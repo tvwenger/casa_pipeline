@@ -73,9 +73,9 @@ def setup(config=None):
                     "nchan":nchan,"outframe":outframe,"veltype":veltype}
     return (my_cont_spws,my_line_spws,clean_params)
 
-def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
+def mfs_cont(field='',vis='',my_cont_spws='',clean_params={}):
     """
-    Clean continuum spws
+    Clean continuum spws using multi-frequency synthesis
 
     Inputs:
       field        = field to be cleaned
@@ -112,10 +112,58 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
+def mfs_line(field='',vis='',spws=[],clean_params={}):
+    """
+    Clean line spws using multi-frequency synthesis
+
+    Inputs:
+      field        = field to be cleaned
+      vis          = measurement set
+      spws         = list of line spws to clean
+      clean_params = dictionary of clean parameters
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    #
+    # Clean line
+    #
+    imagename='{0}.spws_{1}.cont.clean'.format(field,'_'.join(spws))
+    logger.info("Cleaning continuum...")
+    casa.clean(vis=vis,imagename=imagename,field=field,spw=','.join(spws),
+               threshold='0mJy',niter=10000,interactive=True,
+               imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
+               gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+               imsize=clean_params['imsize'],cell=clean_params['cell'],
+               weighting=clean_params['weighting'],robust=clean_params['robust'],
+               usescratch=True)
+    logger.info("Done.")
+    #
+    # Primary beam correction
+    #
+    logger.info("Performing primary beam correction...")
+    casa.impbcor(imagename='{0}.image'.format(imagename),
+                 pbimage='{0}.flux'.format(imagename),
+                 outfile='{0}.pbcor'.format(imagename))
+    logger.info("Done.")
+    #
+    # Copy clean mask to other spws being cleaned
+    #
+    logger.info("Copying clean mask to spws {1}".format(spws))
+    oldmaskfile = '{0}.mask'.format(imagename,spw)
+    for spw in spws:
+        newmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
+        shutil.copytree(oldmaskfile,newmaskfile)
+    logger.info("Done!")
+
 def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
                       clean_params={},config=None):
     """
-    Clean first line spw to get clean threshold
+    Clean a line spw to get clean threshold
 
     Inputs:
       field        = field to be imaged
@@ -160,17 +208,6 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                usescratch=True)
     logger.info("Done.")
-    #
-    # Copy clean mask to other spws being cleaned
-    #
-    logger.info("Copying clean mask from spw {0} to spws {1}".format(spw,spws))
-    oldmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
-    for my_spw in spws:
-        if my_spw == spw:
-            continue
-        newmaskfile = '{0}.spw{1}.clean.mask'.format(field,my_spw)
-        shutil.copytree(oldmaskfile,newmaskfile)
-    logger.info("Done!")
 
 def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
                     clean_params={},threshold='',config=None):
@@ -269,24 +306,28 @@ def main(field,vis='',spws=[],config_file=''):
     # Prompt the user with a menu for each option
     #
     while True:
-        print("0. Manually clean continuum image")
-        print("1. Manually clean a line spectral window, copy clean mask to other spws")
-        print("2. Set line spectral window clean threshold")
-        print("3. Automatically clean line spectral windows")
+        print("0. Manually mfs clean continuum image")
+        print("1. Manually mfs clean line spectral windows, copy clean mask to all spws")
+        print("2. Manually clean line spectral window to get clean threshold")
+        print("3. Set line spectral window clean threshold")
+        print("4. Automatically clean line spectral windows")
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
-            clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
+            mfs_clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
         elif answer == '1':
+            mfs_clean_line(field=field,vis=vis,spws=spws,
+                           clean_params=clean_params)
+        elif answer == '2':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
             manual_clean_line(field=field,vis=vis,spw=spw,spws=spws,
                               my_line_spws=my_line_spws,
                               clean_params=clean_params,config=config)
-        elif answer == '2':
+        elif answer == '3':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
-        elif answer == '3':
+        elif answer == '4':
             if threshold is None:
                 logger.warn("Must set threshold first!")
             else:
