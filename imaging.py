@@ -153,7 +153,7 @@ def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
     #
     # Copy clean mask to other spws being cleaned
     #
-    logger.info("Copying clean mask to spws {1}".format(spws))
+    logger.info("Copying clean mask to spws {0}".format(spws))
     oldmaskfile = '{0}.mask'.format(imagename)
     for spw in spws:
         newmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
