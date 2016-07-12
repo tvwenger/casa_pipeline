@@ -273,7 +273,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False):
     #
     cell_size = float(config.get("Clean","cell").replace('arcsec',''))
     bmaj_target = np.max(bmaj)+2.*cell_size
-    bmin_target = np.max(bmin)+2.*cell_size
+    bmin_target = np.max(bmaj)+2.*cell_size
     bpa_target = np.mean(bpa)
     logger.info("Smoothing all images to")
     logger.info("Major axis: {0} arcsec".format(bmaj_target))
