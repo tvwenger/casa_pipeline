@@ -597,7 +597,7 @@ def flag(vis='',all_fields=[]):
             break
 
 def manual_flag_calibrators(vis='',primary_cals=[],secondary_cals=[],
-                            config=None):
+                            science_targets=[],config=None):
     """
     Interactively plot and flag the calibrators
 
@@ -605,6 +605,7 @@ def manual_flag_calibrators(vis='',primary_cals=[],secondary_cals=[],
       vis            = measurement set
       primary_cals   = list of primary calibrators (must include flux cals)
       secondary_cals = list of secondary calibrators
+      science_targets = list of science targets
 
     Returns:
       Nothing
@@ -653,7 +654,10 @@ def manual_flag_calibrators(vis='',primary_cals=[],secondary_cals=[],
         # Flag some data
         #
         if answer.lower() == 'f':
-            flag(vis,all_fields=primary_cals+secondary_cals)
+            # if we are going to flag something in all fields for the
+            # calibrators, we might as well flag it in the science targets
+            # too
+            flag(vis,all_fields=primary_cals+secondary_cals+science_targets)
         #
         # Stop interactively plotting and flagging
         #
@@ -1268,6 +1272,7 @@ def main(vis='',config_file='',auto=False):
         elif answer == '3':
             manual_flag_calibrators(vis=vis,primary_cals=primary_cals,
                                     secondary_cals=secondary_cals,
+                                    science_targets=science_targets,
                                     config=config)
         elif answer == '4':
             calibrate_calibrators(vis=vis,primary_cals=primary_cals,
