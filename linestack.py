@@ -246,6 +246,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False):
     bmin = []
     bpa = []
     contimage = '{0}.cont.clean.pbcor'.format(field)
+    print(contimage)
     if not os.path.isdir(contimage):
         logger.warn("{0} not found!".format(contimage))
     else:
@@ -258,7 +259,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False):
     for spw in my_line_spws.split(','):
         lineimage = '{0}.spw{1}.clean.line.combeam'.format(field,spw)
         if not os.path.isdir(lineimage):
-            logger.warn("{0} not found!".format(contimage))
+            logger.warn("{0} not found!".format(lineimage))
             continue
         bmaj.append(casa.imhead(imagename=lineimage,mode='get',
                                 hdkey='beammajor')['value'])
