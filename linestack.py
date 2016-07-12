@@ -296,7 +296,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False):
                           pa=bpa_target,outfile=outfile,overwrite=overwrite)
     logger.info("Done!")
 
-def stack_line(field,lineids=[],overwrite=False):
+def stack_line(field,lineids=[],config=None,overwrite=False):
     """
     Stack line images
 
@@ -443,7 +443,8 @@ def main(field,lineids=[],config_file='',overwrite=False):
     #
     # Stack line images
     #
-    stackedimage = stack_line(field,lineids=lineids,overwrite=overwrite)
+    stackedimage = stack_line(field,lineids=lineids,config=config,
+                              overwrite=overwrite)
     #
     # make moment 0 image
     #
