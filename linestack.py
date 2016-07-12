@@ -328,12 +328,11 @@ def stack_line(field,lineids=[],overwrite=False):
     logger.info("Done!")
     return outfile
 
-def linetocont_image(field,stackedimage='',overwrite=False):
+def moment0_image(stackedimage='',overwrite=False):
     """
     Stack line images
 
     Inputs:
-      field        = field to analyze
       stackedimage = filename of line-stacked image
       overwrite    = if True, overwrite steps as necessary
                      if False, skip steps if output already exists
@@ -345,16 +344,46 @@ def linetocont_image(field,stackedimage='',overwrite=False):
     # start logger
     #
     logger = logging.getLogger("main")
+    outfile = stackedimage+'.mom0'
+    if os.path.isdir(outfile):
+        if overwrite:
+            logger.info("Overwriting {0}".format(outfile))
+            shutil.rmtree(outfile)
+        else:
+            logger.info("Found {0}".format(outfile))
+            return outfile
+    logger.info("Creating moment 0 map")
+    casa.immoments(stackedimage,moments=0,outfile=outfile)
+    logger.info("Done!")
+    return outfile
+
+def linetocont_image(field,moment0image='',overwrite=False):
+    """
+    Stack line images
+
+    Inputs:
+      field        = field to analyze
+      moment0image = filename of line-stacked moment 0 image
+      overwrite    = if True, overwrite steps as necessary
+                     if False, skip steps if output already exists
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
     logger.info("Creating line-to-continuum image")
-    if not os.path.isdir(stackedimage):
-        logger.warn("{0} does not exist".format(stackedimage))
+    if not os.path.isdir(moment0image):
+        logger.warn("{0} does not exist".format(moment0image))
         return
     contimage='{0}.cont.imsmooth'.format(field)
     if not os.path.isdir(contimage):
         logger.warn("{0} does not exist".format(contimage))
         return
     outfile='{0}.linetocont.image'.format(field)
-    images = [stackedimage,contimage]
+    images = [moment0image,contimage]
     myexp = 'IM0/IM1'
     casa.immath(imagename=images,outfile=outfile,mode='evalexpr',
                 expr=myexp)
@@ -416,6 +445,10 @@ def main(field,lineids=[],config_file='',overwrite=False):
     #
     stackedimage = stack_line(field,lineids=lineids,overwrite=overwrite)
     #
+    # make moment 0 image
+    #
+    moment0image = moment0_image(stackedimage,overwrite=overwrite)
+    #
     # create line-to-continuum image using stacked line image
     #
-    linetocont_image(field,stackedimage=stackedimage,overwrite=overwrite)
+    linetocont_image(field,moment0image=moment0image,overwrite=overwrite)
