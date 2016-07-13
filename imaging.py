@@ -112,14 +112,14 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
-def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
+def mfs_clean_line(field='',vis='',spws='',clean_params={}):
     """
     Clean line spws using multi-frequency synthesis
 
     Inputs:
       field        = field to be cleaned
       vis          = measurement set
-      spws         = list of line spws to clean
+      spws         = comma-separated string of line spws to image
       clean_params = dictionary of clean parameters
 
     Returns:
@@ -132,9 +132,9 @@ def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
     #
     # Clean line
     #
-    imagename='{0}.spws_{1}.cont.clean'.format(field,'_'.join(spws))
+    imagename='{0}.spws_{1}.cont.clean'.format(field,spws)
     logger.info("MFS cleaning line spws...")
-    casa.clean(vis=vis,imagename=imagename,field=field,spw=','.join(spws),
+    casa.clean(vis=vis,imagename=imagename,field=field,spw=spws,
                threshold='0mJy',niter=10000,interactive=True,
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
@@ -151,7 +151,7 @@ def mfs_clean_line(field='',vis='',spws=[],clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
-def dirty_clean_line(field='',vis='',spws=[],my_line_spws='',
+def dirty_clean_line(field='',vis='',spws='',my_line_spws='',
                       clean_params={},config=None):
     """
     Dirty image line spws, copy mask from MFS to all line spws
@@ -159,7 +159,7 @@ def dirty_clean_line(field='',vis='',spws=[],my_line_spws='',
     Inputs:
       field        = field to be imaged
       vis          = measurement set
-      spws         = list of other spws being cleaned
+      spws         = comma-separated string of spws being cleaned
       my_line_spws = comma-separated string of all line spws
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
@@ -177,7 +177,7 @@ def dirty_clean_line(field='',vis='',spws=[],my_line_spws='',
     if config is None:
         logger.critical("Error: Need to supply a config")
         raise ValueError("Config is None")
-    for spw in spws:
+    for spw in spws.split(','):
         #
         # Get restfreq
         #
@@ -202,15 +202,15 @@ def dirty_clean_line(field='',vis='',spws=[],my_line_spws='',
     #
     # Copy clean mask to other spws being cleaned
     #
-    oldmaskfile = '{0}.spws_{1}.cont.clean.mask'.format(field,'_'.join(spws))
-    for spw in spws:
+    oldmaskfile = '{0}.spws_{1}.cont.clean.mask'.format(field,spws)
+    for spw in spws.split(','):
         logger.info("Copying clean mask to spw {0}".format(spw))
         newmaskfile = '{0}.spw{1}.clean.mask'.format(field,spw)
         casa.makemask(mode='expand',inpimage='{0}.image'.format(imagename),
                       inpmask=oldmaskfile,output=newmaskfile)
     logger.info("Done!")
 
-def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
+def manual_clean_line(field='',vis='',spw='',my_line_spws='',
                       clean_params={},config=None):
     """
     Clean a line spw to get clean threshold
@@ -219,7 +219,6 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
       field        = field to be imaged
       vis          = measurement set
       spw          = spw to clean
-      spws         = list of other spws being cleaned
       my_line_spws = comma-separated string of all line spws
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
@@ -259,7 +258,7 @@ def manual_clean_line(field='',vis='',spw='',spws=[],my_line_spws='',
                usescratch=True)
     logger.info("Done.")
 
-def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
+def auto_clean_line(field='',vis='',spws='',my_line_spws='',
                     clean_params={},threshold='',config=None):
     """
     Clean all line spws non-interactively
@@ -267,7 +266,7 @@ def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
     Inputs:
       field        = field to be imaged
       vis          = measurement set
-      spws         = list of spws to be cleaned
+      spws         = comma-separated string of spws being cleaned
       my_line_spws = comma-separated string of line spws
       clean_params = dictionary of clean parameters
       threshold    = clean threshold
@@ -286,7 +285,7 @@ def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
     if config is None:
         logger.critical("Error: Need to supply a config")
         raise ValueError("Config is None") 
-    for spw in spws:
+    for spw in spws.split(','):
         #
         # Get restfreq
         #
@@ -317,14 +316,15 @@ def auto_clean_line(field='',vis='',spws=[],my_line_spws='',
                      outfile='{0}.pbcor'.format(imagename))
         logger.info("Done.")
 
-def main(field,vis='',spws=[],config_file=''):
+def main(field,vis='',spws='',config_file=''):
     """
-    Combine, image, and clean a field
+    Image, and clean a field
 
     Inputs:
       field       = field name to clean
       vis         = measurement set containing all data for field
-      spws        = spectral windows to image
+      spws        = comma-separated string of spectral windows to image
+                    if empty, image all line spectral windows
       config_file = filename of the configuration file for this project
 
     Returns:
@@ -352,6 +352,8 @@ def main(field,vis='',spws=[],config_file=''):
     #
     threshold = None
     my_cont_spws,my_line_spws,clean_params = setup(config=config)
+    if spws == '':
+        spws = my_line_spws
     #
     # Prompt the user with a menu for each option
     #
@@ -376,7 +378,7 @@ def main(field,vis='',spws=[],config_file=''):
         elif answer == '3':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
-            manual_clean_line(field=field,vis=vis,spw=spw,spws=spws,
+            manual_clean_line(field=field,vis=vis,spw=spw,
                               my_line_spws=my_line_spws,
                               clean_params=clean_params,config=config)
         elif answer == '4':
