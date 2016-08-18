@@ -194,7 +194,8 @@ def setup(vis='',config=None):
 def preliminary_flagging(vis='',my_line_spws='',my_cont_spws='',config=None):
     """
     Perform preliminary flagging: shadowed antennas, quack,
-    flags from configuration file, then tfcrop all raw data
+    flags from configuration file, interpolations from configuration
+    file, then tfcrop all raw data
 
     Inputs:
       vis          = measurement set
@@ -267,6 +268,65 @@ def preliminary_flagging(vis='',my_line_spws='',my_cont_spws='',config=None):
         casa.flagdata(vis=vis,mode='manual',spw=cont_spws,
                       flagbackup=False,extendflags=False)
         logger.info("Done.")
+    #
+    # Interpolate through bad line channels
+    #
+    badchans = config.get("Interpolate","Line Channels").split(',')
+    if badchans[0] != '':
+        logger.info("Interpolating through line channels from configuration file: {0}".format(badchans))
+        line_spws = [int(i) for i in my_line_spws.split(',')]
+        badchans = np.array([int(i) for i in badchans])
+        for line_spw in line_spws:
+            casa.ms.open(vis,nomodify=False)
+            logger.info("Working on spw {0}".format(line_spw))
+            casa.ms.selectinit(datadescid=line_spw)
+            foo = casa.ms.getdata(['data'])
+            for time_ind in range(len(foo['data'][0,0,:])):
+                for pol_ind in range(len(foo['data'][:,0,0])):
+                    # calculate amplitude from complex visibilities
+                    amp = np.abs(foo['data'][pol_ind,:,time_ind])
+                    # interpolate
+                    amp[badchans] = np.interp(badchans,np.delete(range(len(amp)),badchans),
+                                              np.delete(amp,badchans))
+                    # calculate and unwrap phase from complex visibility
+                    phase = np.unwrap(np.angle(foo['data'][pol_ind,:,time_ind]))
+                    # interpolate
+                    phase[badchans] = np.interp(badchans,np.delete(range(len(phase)),badchans),
+                                                np.delete(phase,badchans))
+                    # re-calculate complex visibilities
+                    foo['data'][pol_ind,:,time_ind] = amp*np.cos(phase) + 1.j*amp*np.sin(phase)
+            # save new data
+            casa.ms.putdata(foo)
+            casa.ms.close()
+    #
+    # Interpolate through bad continuum channels
+    #
+    badchans = config.get("Interpolate","Continuum Channels").split(',')
+    if badchans[0] != '':
+        logger.info("Interpolating through continuum channels from configuration file: {0}".format(badchans))
+        cont_spws = [int(i) for i in my_cont_spws.split(',')]
+        badchans = np.array([int(i) for i in badchans])
+        casa.ms.open(vis,nomodify=False)
+        for cont_spw in cont_spws:
+            logger.info("Working on spw {0}".format(cont_spw))
+            casa.ms.selectinit(datadescid=cont_spw)
+            foo = casa.ms.getdata(['data'])
+            for time_ind in range(len(foo['data'][0,0,:])):
+                for pol_ind in range(len(foo['data'][:,0,0])):
+                    # calculate amplitude from complex visibilities
+                    amp = np.abs(foo['data'][pol_ind,:,time_ind])
+                    # interpolate
+                    amp[badchans] = np.interp(badchans,np.delete(range(len(amp)),badchans),
+                                              np.delete(amp,badchans))
+                    # calculate and unwrap phase from complex visibility
+                    phase = np.unwrap(np.angle(foo['data'][pol_ind,:,time_ind]))
+                    # interpolate
+                    phase[badchans] = np.interp(badchans,np.delete(range(len(phase)),badchans),
+                                                np.delete(phase,badchans))
+                    # re-calculate complex visibilities
+                    foo['data'][pol_ind,:,time_ind] = amp*np.cos(phase) + 1.j*amp*np.sin(phase)
+            # save new data
+            casa.ms.putdata(foo)
     #
     # Run tfcrop on all fields
     #
