@@ -14,6 +14,7 @@ import pickle
 import logging
 import logging.config
 import ConfigParser
+import gc
 
 __VERSION__ = "1.0"
 
@@ -297,7 +298,9 @@ def preliminary_flagging(vis='',my_line_spws='',my_cont_spws='',config=None):
                     foo['data'][pol_ind,:,time_ind] = amp*np.cos(phase) + 1.j*amp*np.sin(phase)
             # save new data
             casa.ms.putdata(foo)
-            casa.ms.close()
+            casa.ms.done()
+            foo = 0
+            gc.collect()
     #
     # Interpolate through bad continuum channels
     #
@@ -306,8 +309,8 @@ def preliminary_flagging(vis='',my_line_spws='',my_cont_spws='',config=None):
         logger.info("Interpolating through continuum channels from configuration file: {0}".format(badchans))
         cont_spws = [int(i) for i in my_cont_spws.split(',')]
         badchans = np.array([int(i) for i in badchans])
-        casa.ms.open(vis,nomodify=False)
         for cont_spw in cont_spws:
+            casa.ms.open(vis,nomodify=False)
             logger.info("Working on spw {0}".format(cont_spw))
             casa.ms.selectinit(datadescid=cont_spw)
             foo = casa.ms.getdata(['data'])
@@ -327,6 +330,9 @@ def preliminary_flagging(vis='',my_line_spws='',my_cont_spws='',config=None):
                     foo['data'][pol_ind,:,time_ind] = amp*np.cos(phase) + 1.j*amp*np.sin(phase)
             # save new data
             casa.ms.putdata(foo)
+            casa.ms.done()
+            foo = 0
+            gc.collect()
     #
     # Run tfcrop on all fields
     #

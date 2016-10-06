@@ -18,7 +18,7 @@ __VERSION__ = "1.0"
 # load logging configuration file
 logging.config.fileConfig('logging.conf')
 
-def setup(config=None):
+def setup(vis='',config=None):
     """
     Perform setup tasks: find line and continuum spectral windows
                          get clean parameters
@@ -71,6 +71,22 @@ def setup(config=None):
                     "multiscale":multiscale,"gain":gain,"cyclefactor":cyclefactor,
                     "velstart":velstart,"chanwidth":chanwidth,
                     "nchan":nchan,"outframe":outframe,"veltype":veltype}
+    #
+    # Re-grid velocity axis of line spectral windows
+    #
+    for spw in my_line_spws.split(','):
+        regrid_vis = vis+'.spw{0}.cvel'.format(spw)
+        if os.path.isdir(regrid_vis):
+            print("Found {0}".format(regrid_vis))
+            continue
+        print("Regridding velocity axis of spw {0}".format(spw))
+        spw_ind = my_line_spws.split(',').index(spw)
+        restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
+        casa.cvel(vis=vis,outputvis=regrid_vis,spw=spw,restfreq=restfreq,mode='velocity',
+                  start=clean_params['velstart'],width=clean_params['chanwidth'],
+                  nchan=clean_params['nchan'],outframe=clean_params['outframe'],
+                  veltype=clean_params['veltype'],interpolation='fftshift')
+        print("Done.")
     return (my_cont_spws,my_line_spws,clean_params)
 
 def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
@@ -186,16 +202,16 @@ def dirty_clean_line(field='',vis='',spws='',my_line_spws='',
         #
         # clean spw
         #
-        imagename='{0}.spw{1}.dirty'.format(field,spw)
+        imagename='{0}.spw{1}.clean'.format(field,spw)
         logger.info("Dirty imaging spw {0} (restfreq: {1})...".format(spw,restfreq))
-        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
+        regrid_vis = vis+'.spw{0}.cvel'.format(spw)
+        casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
                 threshold='0mJy',niter=0,interactive=False,
                 imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                 gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                 imsize=clean_params['imsize'],cell=clean_params['cell'],
                 weighting=clean_params['weighting'],robust=clean_params['robust'],
-                nchan=clean_params['nchan'],start=clean_params['velstart'],
-                width=clean_params['chanwidth'],restfreq=restfreq,
+                restfreq=restfreq,
                 outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                 usescratch=True)
         logger.info("Done.")
@@ -246,14 +262,14 @@ def manual_clean_line(field='',vis='',spw='',my_line_spws='',
     #
     imagename='{0}.spw{1}.clean'.format(field,spw)
     logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
-    casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
+    regrid_vis = vis+'.spw{0}.cvel'.format(spw)
+    casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
                threshold='0mJy',niter=10000,interactive=True,
                imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               nchan=clean_params['nchan'],start=clean_params['velstart'],
-               width=clean_params['chanwidth'],restfreq=restfreq,
+               restfreq=restfreq,
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                usescratch=True)
     logger.info("Done.")
@@ -296,14 +312,14 @@ def auto_clean_line(field='',vis='',spws='',my_line_spws='',
         #
         imagename='{0}.spw{1}.clean'.format(field,spw)
         logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
-        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
+        regrid_vis = vis+'.spw{0}.cvel'.format(spw)
+        casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
                    threshold=threshold,niter=10000,interactive=False,
                    imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
-                   nchan=clean_params['nchan'],start=clean_params['velstart'],
-                   width=clean_params['chanwidth'],restfreq=restfreq,
+                   restfreq=restfreq,
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                    usescratch=True)
         logger.info("Done.")
@@ -351,7 +367,7 @@ def main(field,vis='',spws='',config_file=''):
     # initial setup
     #
     threshold = None
-    my_cont_spws,my_line_spws,clean_params = setup(config=config)
+    my_cont_spws,my_line_spws,clean_params = setup(vis=vis,config=config)
     if spws == '':
         spws = my_line_spws
     #
@@ -360,7 +376,7 @@ def main(field,vis='',spws='',config_file=''):
     while True:
         print("0. Manually mfs clean continuum image")
         print("1. Manually mfs clean line spectral windows")
-        print("2. Dirty image line spectral windows and copy clean mask from previous step")
+        print("2. Dirty image line spectral windows and copy mask")
         print("3. Manually clean line spectral window to get clean threshold")
         print("4. Set line spectral window clean threshold")
         print("5. Automatically clean line spectral windows")
