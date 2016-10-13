@@ -24,6 +24,7 @@ def setup(vis='',config=None):
                          get clean parameters
 
     Inputs:
+      vis     = measurement set
       config  = ConfigParser object for this project
 
     Returns:
@@ -55,39 +56,70 @@ def setup(vis='',config=None):
     lineids = config.get("Clean","lineids").split(',')
     restfreqs = config.get("Clean","restfreqs").split(',')
     imsize = [int(foo) for foo in config.get("Clean","imsize").split(',')]
-    cell = config.get("Clean","cell")
+    cell = config.getfloat("Clean","cell")
+    cell = "{0}arcsec".format(cell)
     weighting = config.get("Clean","weighting")
     robust = config.getfloat("Clean","robust")
     multiscale = [int(foo) for foo in config.get("Clean","multiscale").split(',') if foo != '']
     gain = config.getfloat("Clean","gain")
     cyclefactor = config.getfloat("Clean","cyclefactor")
-    velstart = config.get("Clean","velstart")
-    chanwidth = config.get("Clean","chanwidth")
+    velstart = config.getfloat("Clean","velstart")
+    chanwidth = config.getfloat("Clean","chanwidth")
     nchan = config.getint("Clean","nchan")
+    chanbuffer = config.getint("Clean","chanbuffer")
+    cvelstart = "{0}km/s".format(velstart-(chanbuffer*chanwidth))
+    velstart = "{0}km/s".format(velstart)
+    chanwidth = "{0}km/s".format(chanwidth)
+    cvelnchan = nchan+2*chanbuffer
     outframe = config.get("Clean","outframe")
     veltype = config.get("Clean","veltype")
     clean_params = {"lineids":lineids,"restfreqs":restfreqs,"imsize":imsize,
                     "cell":cell,"weighting":weighting,"robust":robust,
                     "multiscale":multiscale,"gain":gain,"cyclefactor":cyclefactor,
                     "velstart":velstart,"chanwidth":chanwidth,
-                    "nchan":nchan,"outframe":outframe,"veltype":veltype}
+                    "nchan":nchan,"outframe":outframe,"veltype":veltype,
+                    "cvelstart":cvelstart,"cvelnchan":cvelnchan}
+    return (my_cont_spws,my_line_spws,clean_params)
+
+def regrid_velocity(vis='',spws='',config=None,clean_params={}):
+    """
+    Re-grid velocity axis of each spectral window
+
+    Inputs:
+      vis     = measurement set
+      spws    = comma-separated list of spectral windows to regrid
+      config  = ConfigParser object for this project
+      clean_params = dictionary of clean parameters
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None") 
     #
     # Re-grid velocity axis of line spectral windows
     #
-    for spw in my_line_spws.split(','):
+    for spw in spws.split(','):
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         if os.path.isdir(regrid_vis):
-            print("Found {0}".format(regrid_vis))
+            logger.info("Found {0}".format(regrid_vis))
             continue
-        print("Regridding velocity axis of spw {0}".format(spw))
-        spw_ind = my_line_spws.split(',').index(spw)
+        logger.info("Regridding velocity axis of spw {0}".format(spw))
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         casa.cvel(vis=vis,outputvis=regrid_vis,spw=spw,restfreq=restfreq,mode='velocity',
-                  start=clean_params['velstart'],width=clean_params['chanwidth'],
-                  nchan=clean_params['nchan'],outframe=clean_params['outframe'],
+                  start=clean_params['cvelstart'],width=clean_params['chanwidth'],
+                  nchan=clean_params['cvelnchan'],outframe=clean_params['outframe'],
                   veltype=clean_params['veltype'],interpolation='fftshift')
-        print("Done.")
-    return (my_cont_spws,my_line_spws,clean_params)
+        logger.info("Done.")
 
 def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     """
@@ -117,6 +149,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
+               
                usescratch=True)
     logger.info("Done.")
     #
@@ -211,7 +244,8 @@ def dirty_clean_line(field='',vis='',spws='',my_line_spws='',
                 gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                 imsize=clean_params['imsize'],cell=clean_params['cell'],
                 weighting=clean_params['weighting'],robust=clean_params['robust'],
-                restfreq=restfreq,
+                restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+                nchan=clean_params['nchan'],
                 outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                 usescratch=True)
         logger.info("Done.")
@@ -269,7 +303,8 @@ def manual_clean_line(field='',vis='',spw='',my_line_spws='',
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               restfreq=restfreq,
+               restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+               nchan=clean_params['nchan'],
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                usescratch=True)
     logger.info("Done.")
@@ -319,7 +354,8 @@ def auto_clean_line(field='',vis='',spws='',my_line_spws='',
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
-                   restfreq=restfreq,
+                   restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+                   nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
                    usescratch=True)
         logger.info("Done.")
@@ -370,6 +406,10 @@ def main(field,vis='',spws='',config_file=''):
     my_cont_spws,my_line_spws,clean_params = setup(vis=vis,config=config)
     if spws == '':
         spws = my_line_spws
+    #
+    # Regrid velocity axis
+    #
+    regrid_velocity(vis=vis,spws=spws,config=config,clean_params=clean_params)
     #
     # Prompt the user with a menu for each option
     #
