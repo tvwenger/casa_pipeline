@@ -140,7 +140,10 @@ def contsub(field,my_line_spws='',overwrite=False):
             region='{0}.spw{1}.reg'.format(field,spw)
             if not os.path.exists(region):
                 logger.warn("{0} was not found!".format(region))
-                continue
+                region='{0}.reg'.format(field)
+                if not os.path.exists(region):
+                    logger.warn("{0} was not found, skipping...".format(region))
+                    continue
             linefile='{0}.spw{1}.clean.line'.format(field,spw)
             contfile='{0}.spw{1}.clean.cont'.format(field,spw)
             if os.path.isdir(linefile) or os.path.isdir(contfile):
