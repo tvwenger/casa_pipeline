@@ -200,7 +200,7 @@ def dirty_image_line(field='',vis='',spws='',my_line_spws='',
         logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
-                   threshold=threshold,niter=10000,interactive=False,
+                   threshold='0mJy',niter=0,interactive=False,
                    imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -208,7 +208,7 @@ def dirty_image_line(field='',vis='',spws='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   usescratch=True,mask=mask)
+                   usescratch=True)
         logger.info("Done.")
         #
         # Primary beam correction
