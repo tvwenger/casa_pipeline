@@ -161,6 +161,65 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
 
+def dirty_image_line(field='',vis='',spws='',my_line_spws='',
+                     clean_params={},config=None):
+    """
+    Dirty image all line spws
+
+    Inputs:
+      field        = field to be imaged
+      vis          = measurement set
+      spws    = comma-separated list of spectral windows to image
+      my_line_spws = comma-separated string of line spws
+      clean_params = dictionary of clean parameters
+      config       = ConfigParser object for this project
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None") 
+    for spw in spws.split(','):
+        #
+        # Get restfreq
+        #
+        spw_ind = my_line_spws.split(',').index(spw)
+        restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
+        #
+        # clean spw
+        #
+        imagename='{0}.spw{1}.dirty'.format(field,spw)
+        logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
+        regrid_vis = vis+'.spw{0}.cvel'.format(spw)
+        casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
+                   threshold=threshold,niter=10000,interactive=False,
+                   imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                   imsize=clean_params['imsize'],cell=clean_params['cell'],
+                   weighting=clean_params['weighting'],robust=clean_params['robust'],
+                   restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+                   nchan=clean_params['nchan'],
+                   outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   usescratch=True,mask=mask)
+        logger.info("Done.")
+        #
+        # Primary beam correction
+        #
+        logger.info("Performing primary beam correction...")
+        casa.impbcor(imagename='{0}.image'.format(imagename),
+                     pbimage='{0}.flux'.format(imagename),
+                     outfile='{0}.pbcor'.format(imagename))
+        logger.info("Done.")
+
+
 def mfs_clean_line(field='',vis='',spws='',clean_params={}):
     """
     Clean line spws using multi-frequency synthesis
@@ -357,28 +416,33 @@ def main(field,vis='',spws='',config_file=''):
     #
     while True:
         print("0. Manually mfs clean continuum image")
-        print("1. Manually mfs clean line spectral windows")
-        print("2. Manually clean line spectral window to get clean threshold")
-        print("3. Set line spectral window clean threshold")
-        print("4. Automatically clean line spectral windows")
+        print("1. Dirty clean ALL line spectral windows")
+        print("2. Manually mfs clean SELECTED line spectral windows")
+        print("3. Manually clean line ANY spectral window to get clean threshold")
+        print("4. Set line spectral window clean threshold")
+        print("5. Automatically clean SELECTED line spectral windows")
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
             mfs_clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
         elif answer == '1':
+            dirty_image_line(field=field,vis=vis,spws=spws,
+                             my_line_spws=my_line_spws,
+                             clean_params=clean_params,config=config)
+        elif answer == '2':
             mfs_clean_line(field=field,vis=vis,spws=spws,
                            clean_params=clean_params)
-        elif answer == '2':
+        elif answer == '3':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
             manual_clean_line(field=field,vis=vis,spw=spw,
                               my_line_spws=my_line_spws,
                               mask='{0}.spws_{1}.cont.clean.mask'.format(field,spws),
                               clean_params=clean_params,config=config)
-        elif answer == '3':
+        elif answer == '4':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
-        elif answer == '4':
+        elif answer == '5':
             if threshold is None:
                 logger.warn("Must set threshold first!")
             else:
