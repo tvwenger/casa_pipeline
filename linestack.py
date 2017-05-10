@@ -112,7 +112,7 @@ class ClickPlot:
         regions = zip(self.clickx_data[::2],self.clickx_data[1::2])
         return regions
 
-def contsub(field,my_line_spws='',overwrite=False):
+def contsub(field,my_line_spws='',overwrite=False,linetype='clean'):
     """
     Subtact continuum from line spws, save line-free-region RMS
     to file.
@@ -133,7 +133,7 @@ def contsub(field,my_line_spws='',overwrite=False):
     logger.info("Performing continuum subtraction")
     with open('{0}.line_rms.txt'.format(field),'w') as f:
         for spw in my_line_spws.split(','):
-            imagename='{0}.spw{1}.clean.pbcor'.format(field,spw)
+            imagename='{0}.spw{1}.{2}.pbcor'.format(field,spw,linetype)
             if not os.path.isdir(imagename):
                 logger.warn("{0} was not found!".format(imagename))
                 continue
@@ -144,8 +144,8 @@ def contsub(field,my_line_spws='',overwrite=False):
                 if not os.path.exists(region):
                     logger.warn("{0} was not found, skipping...".format(region))
                     continue
-            linefile='{0}.spw{1}.clean.line'.format(field,spw)
-            contfile='{0}.spw{1}.clean.cont'.format(field,spw)
+            linefile='{0}.spw{1}.{2}.line'.format(field,spw,linetype)
+            contfile='{0}.spw{1}.{2}.cont'.format(field,spw,linetype)
             if os.path.isdir(linefile) or os.path.isdir(contfile):
                 if overwrite:
                     logger.info("Overwriting {0}".format(linefile))
@@ -178,7 +178,8 @@ def contsub(field,my_line_spws='',overwrite=False):
             f.write('{0:2} {1:6.3f}\n'.format(spw,rms))
     logger.info("Done!")
 
-def combeam_line_spws(field,my_line_spws='',overwrite=False):
+def combeam_line_spws(field,my_line_spws='',overwrite=False,
+                      linetype='clean'):
     """
     Smooth each line spw to common beam within that spw (i.e. if
     beam is varying over frequency within that spw)
@@ -198,11 +199,11 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False):
     logger = logging.getLogger("main")
     logger.info("Smoothing each line spw to common beam")
     for spw in my_line_spws.split(','):
-        imagename='{0}.spw{1}.clean.line'.format(field,spw)
+        imagename='{0}.spw{1}.{2}.line'.format(field,spw,linetype)
         if not os.path.isdir(imagename):
             logger.warn("{0} was not found!".format(imagename))
             continue
-        outfile='{0}.spw{1}.clean.line.combeam'.format(field,spw)
+        outfile='{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
         if os.path.isdir(outfile):
             if overwrite:
                 logger.info("Overwriting {0}".format(outfile))
@@ -214,7 +215,8 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False):
                       outfile=outfile,overwrite=overwrite)
     logger.info("Done!")
 
-def smooth_all(field,my_line_spws='',config=None,overwrite=False):
+def smooth_all(field,my_line_spws='',config=None,overwrite=False,
+               linetype='clean'):
     """
     Smooth all line and continuum images to worst resolution of
     any individual image, name images with lineID
@@ -260,7 +262,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False):
         bpa.append(casa.imhead(imagename=contimage,mode='get',
                                hdkey='beampa')['value'])
     for spw in my_line_spws.split(','):
-        lineimage = '{0}.spw{1}.clean.line.combeam'.format(field,spw)
+        lineimage = '{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
         if not os.path.isdir(lineimage):
             logger.warn("{0} not found!".format(lineimage))
             continue
@@ -292,15 +294,16 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False):
                       targetres=True,major=bmaj_target,minor=bmin_target,
                       pa=bpa_target,outfile=outfile,overwrite=overwrite)
     for spw,lineid in zip(my_line_spws.split(','),config.get('Clean','lineids').split(',')):
-        lineimage = '{0}.spw{1}.clean.line.combeam'.format(field,spw)
+        lineimage = '{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
         if os.path.isdir(lineimage):
-            outfile = '{0}.{1}.imsmooth'.format(field,lineid)
+            outfile = '{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype)
             casa.imsmooth(imagename=lineimage,kernel='gauss',
                           targetres=True,major=bmaj_target,minor=bmin_target,
                           pa=bpa_target,outfile=outfile,overwrite=overwrite)
     logger.info("Done!")
 
-def stack_line(field,lineids=[],config=None,overwrite=False):
+def stack_line(field,lineids=[],config=None,overwrite=False,
+               linetype='clean'):
     """
     Stack line images
 
@@ -323,7 +326,7 @@ def stack_line(field,lineids=[],config=None,overwrite=False):
     if len(lineids) == 0:
         lineids = config.get("Clean","lineids").split(',')
     logger.info("Stacking lines {0}".format(lineids))
-    images = ['{0}.{1}.imsmooth'.format(field,lineid) for lineid in lineids]
+    images = ['{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
     ims = ['IM{0}'.format(foo) for foo in range(len(images))]
     myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
     outfile='{0}.Halpha_{1}lines.image'.format(field,str(len(images)))
@@ -393,7 +396,8 @@ def linetocont_image(field,moment0image='',overwrite=False):
                 expr=myexp)
     logger.info("Done!")
 
-def main(field,lineids=[],config_file='',overwrite=False):
+def main(field,lineids=[],config_file='',overwrite=False,
+         linetype='clean'):
     """
     Continuum subtract, smooth line images to common beam, 
     smooth all line and continuum images to common beam (rename spw 
@@ -405,6 +409,7 @@ def main(field,lineids=[],config_file='',overwrite=False):
       config_file = filename of the configuration file for this project
       overwrite   = if True, overwrite steps as necessary
                     if False, skip steps if output already exists
+      linetype = 'clean' or 'dirty'
 
     Returns:
       Nothing
@@ -433,22 +438,24 @@ def main(field,lineids=[],config_file='',overwrite=False):
     #
     # Continuum subtact line images
     #
-    contsub(field,my_line_spws=my_line_spws,overwrite=overwrite)
+    contsub(field,my_line_spws=my_line_spws,overwrite=overwrite,
+            linetype=linetype)
     #
     # smooth line images to common beam
     #
-    combeam_line_spws(field,my_line_spws=my_line_spws,overwrite=overwrite)
+    combeam_line_spws(field,my_line_spws=my_line_spws,overwrite=overwrite,
+                      linetype=linetype)
     #
     # Smooth all line and continuum images to common beam, rename
     # by lineid
     #
     smooth_all(field,my_line_spws=my_line_spws,config=config,
-               overwrite=overwrite)
+               overwrite=overwrite,linetype=linetype)
     #
     # Stack line images
     #
     stackedimage = stack_line(field,lineids=lineids,config=config,
-                              overwrite=overwrite)
+                              overwrite=overwrite,linetype=linetype)
     #
     # make moment 0 image
     #
