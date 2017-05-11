@@ -148,8 +148,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
-               weighting=clean_params['weighting'],robust=clean_params['robust'],
-               
+               weighting=clean_params['weighting'],robust=clean_params['robust'],               
                usescratch=True)
     logger.info("Done.")
     #
@@ -189,8 +188,7 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               
-               usescratch=True)
+               outframe=clean_params['outframe'],usescratch=True)
     logger.info("Done.")
     #
     # Primary beam correction
