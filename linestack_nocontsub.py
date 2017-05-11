@@ -49,135 +49,6 @@ def setup(config=None):
     logger.info("Found line spws: {0}".format(my_line_spws))
     return (my_cont_spws,my_line_spws)
 
-class ClickPlot:
-    """
-    Generic class for generating and interacting with matplotlib figures
-    """
-    def __init__(self,num):
-        self.fig = plt.figure(num)
-        plt.clf()
-        print "Created figure",self.fig.number
-        self.ax = self.fig.add_subplot(111)
-        self.clickbutton = []
-        self.clickx_data = []
-        self.clicky_data = []
-
-    def onclick(self,event):
-        """
-        Handle click event
-        """
-        if event.button not in [1,3]:
-            return
-        try:
-            print "Click at ({0:.2f},{1:.2f})".format(event.xdata,
-                                                      event.ydata)
-        except ValueError:
-            return
-        self.clickbutton.append(event.button)
-        self.clickx_data.append(event.xdata)
-        self.clicky_data.append(event.ydata)
-
-    def get_line_free_regions(self,xdata,ydata,xlabel=None,ylabel=None):
-        """
-        Using click events to get the line free regions of a
-        spectrum
-        """
-        self.ax.clear()
-        self.ax.plot(xdata,ydata,'k-')
-        self.ax.set_xlabel(xlabel)
-        self.ax.set_ylabel(ylabel)
-        self.clickbutton = []
-        self.clickx_data = []
-        self.clicky_data = []
-        print "Left click to select start of line-free-region."
-        print "Left click again to select end of line-free-region."
-        print "Repeat as necessary."
-        print "Right click when done."
-        cid = self.fig.canvas.mpl_connect('button_press_event',
-                                          self.onclick)
-        self.fig.show()
-        while True:
-            self.fig.waitforbuttonpress()
-            if 3 in self.clickbutton:
-                break
-            elif 1 in self.clickbutton:
-                self.ax.axvline(self.clickx_data[-1])
-        self.fig.canvas.mpl_disconnect(cid)
-        # remove last element (right-click)
-        self.clickx_data = self.clickx_data[0:-1]
-        # check that there are an even number, otherwise remove last
-        # element
-        if len(self.clickx_data) % 2 != 0:
-            self.clickx_data = self.clickx_data[0:-1]
-        regions = zip(self.clickx_data[::2],self.clickx_data[1::2])
-        return regions
-
-def contsub(field,my_line_spws='',overwrite=False,linetype='clean'):
-    """
-    Subtact continuum from line spws, save line-free-region RMS
-    to file.
-
-    Inputs:
-      field        = field to analyze
-      my_line_spws = comma separated string of line spws
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    logger.info("Performing continuum subtraction")
-    with open('{0}.line_rms.txt'.format(field),'w') as f:
-        for spw in my_line_spws.split(','):
-            imagename='{0}.spw{1}.{2}.pbcor'.format(field,spw,linetype)
-            if not os.path.isdir(imagename):
-                logger.warn("{0} was not found!".format(imagename))
-                continue
-            region='{0}.spw{1}.reg'.format(field,spw)
-            if not os.path.exists(region):
-                logger.warn("{0} was not found!".format(region))
-                region='{0}.reg'.format(field)
-                if not os.path.exists(region):
-                    logger.warn("{0} was not found, skipping...".format(region))
-                    continue
-            linefile='{0}.spw{1}.{2}.line'.format(field,spw,linetype)
-            contfile='{0}.spw{1}.{2}.cont'.format(field,spw,linetype)
-            if os.path.isdir(linefile) or os.path.isdir(contfile):
-                if overwrite:
-                    logger.info("Overwriting {0}".format(linefile))
-                    logger.info("Overwriting {0}".format(contfile))
-                    shutil.rmtree(linefile)
-                    shutil.rmtree(contfile)
-                else:
-                    logger.info("{0} or {1} exists.".format(linefile,contfile))
-                    continue
-            stats = casa.imstat(imagename=imagename,region=region,axes=[0,1])
-            myplot = ClickPlot(0)
-            regs = myplot.get_line_free_regions(range(len(stats['flux'])),
-                                                stats['flux'],
-                                                xlabel='channel',
-                                                ylabel='flux (Jy)')
-            chans = []
-            fluxdata = np.array([])
-            for idx,reg in enumerate(regs):
-                start,end = int(reg[0]),int(reg[1])
-                if start < 0:
-                    start = 0
-                if end >= len(stats['flux']):
-                    end = len(stats['flux'])-1
-                chans.append('{0}~{1}'.format(start,end))
-                fluxdata = np.append(fluxdata,stats['flux'][start:end])
-            chans = ','.join(chans)
-            casa.imcontsub(imagename=imagename,linefile=linefile,
-                           contfile=contfile,chans=chans)
-            rms = np.sqrt(np.mean((fluxdata-np.mean(fluxdata))**2.))
-            f.write('{0:2} {1:6.3f}\n'.format(spw,rms))
-    logger.info("Done!")
-
 def combeam_line_spws(field,my_line_spws='',overwrite=False,
                       linetype='clean'):
     """
@@ -199,11 +70,11 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False,
     logger = logging.getLogger("main")
     logger.info("Smoothing each line spw to common beam")
     for spw in my_line_spws.split(','):
-        imagename='{0}.spw{1}.{2}.line'.format(field,spw,linetype)
+        imagename='{0}.spw{1}.{2}.pbcor'.format(field,spw,linetype)
         if not os.path.isdir(imagename):
             logger.warn("{0} was not found!".format(imagename))
             continue
-        outfile='{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
+        outfile='{0}.spw{1}.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(outfile):
             if overwrite:
                 logger.info("Overwriting {0}".format(outfile))
@@ -262,7 +133,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
         bpa.append(casa.imhead(imagename=contimage,mode='get',
                                hdkey='beampa')['value'])
     for spw in my_line_spws.split(','):
-        lineimage = '{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
+        lineimage = '{0}.spw{1}.{2}.pbcor.combeam'.format(field,spw,linetype)
         if not os.path.isdir(lineimage):
             logger.warn("{0} not found!".format(lineimage))
             continue
@@ -294,7 +165,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
                       targetres=True,major=bmaj_target,minor=bmin_target,
                       pa=bpa_target,outfile=outfile,overwrite=overwrite)
     for spw,lineid in zip(my_line_spws.split(','),config.get('Clean','lineids').split(',')):
-        lineimage = '{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
+        lineimage = '{0}.spw{1}.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(lineimage):
             outfile = '{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype)
             casa.imsmooth(imagename=lineimage,kernel='gauss',
@@ -436,11 +307,6 @@ def main(field,lineids=[],config_file='',overwrite=False,
     # initial setup
     #
     my_cont_spws,my_line_spws = setup(config=config)
-    #
-    # Continuum subtact line images
-    #
-    contsub(field,my_line_spws=my_line_spws,overwrite=overwrite,
-            linetype=linetype)
     #
     # smooth line images to common beam
     #
