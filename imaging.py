@@ -467,7 +467,7 @@ def main(field,vis='',spws='',config_file=''):
         if answer == '0':
             mfs_clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
         if answer == '1':
-            cs_clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
+            clean_cont(field=field,vis=vis,my_cont_spws=my_cont_spws,clean_params=clean_params)
         elif answer == '2':
             dirty_image_line(field=field,vis=vis,spws=spws,
                              my_line_spws=my_line_spws,
