@@ -13,6 +13,7 @@ from scipy.optimize import curve_fit
 __VERSION__ = "1.0"
 
 def gaussians(x,amps,fwhms,centers,cont):
+    print(amps,fwhms,centers)
     sigmas = fwhms / (2.*np.sqrt(2.*np.log(2.)))
     y = np.sum([a*np.exp(-(x-c)**2./(2*s**2.))
                 for a,s,c in zip(amps,sigmas,centers)],axis=0)
