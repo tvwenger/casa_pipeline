@@ -12,7 +12,8 @@ from scipy.optimize import curve_fit
 
 __VERSION__ = "1.0"
 
-def gaussians(x,amps,fwhms,centers,cont):
+def gaussians(x,params):
+    amps,fwhms,centers,cont = params
     print(amps,fwhms,centers)
     sigmas = fwhms / (2.*np.sqrt(2.*np.log(2.)))
     y = np.sum([a*np.exp(-(x-c)**2./(2*s**2.))
@@ -159,20 +160,14 @@ def fit(imagename,region):
     end_ind = np.argmin(np.abs(end-chans))
     center_inds = np.array([np.argmin(np.abs(c-chans)) for c in centers])
     width_inds = np.array([np.argmin(np.abs(w-chans)) for w in widths])
-    print(center_inds)
-    print(width_inds)
     xdata = chans[start_ind:end_ind]
     ydata = fluxes[start_ind:end_ind]
     p0_amps = fluxes[center_inds]
     p0_fwhms = chans[width_inds]-chans[center_inds]
     p0_centers = chans[center_inds]
     p0_cont = np.mean(fluxdata)
-    print(p0_amps)
-    print(p0_fwhms)
-    print(p0_centers)
-    print(p0_cont)
-    popt, pcov = curve_fit(gaussians,xdata,ydata,
-                           p0=(p0_amps,p0_centers,p0_fwhms,p0_cont))
+    p0 = (p0_amps,p0_fwhms,p0_centers,p0_cont)
+    popt, pcov = curve_fit(gaussians,xdata,ydata,p0=p0)
     #
     # Return results
     #
