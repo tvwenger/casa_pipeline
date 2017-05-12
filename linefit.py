@@ -172,7 +172,7 @@ def fit(imagename,region):
         p0_params += [p0_centers[i]]
         p0_params += [p0_fwhms[i]]
     print(p0_params)
-    popt, pcov = curve_fit(gaussians,xdata,ydata,p0=p0)
+    popt, pcov = curve_fit(gaussians,xdata,ydata,p0=p0_params)
     #
     # Return results
     #
