@@ -133,7 +133,7 @@ class ClickPlot:
         self.clickx_data = []
         self.clicky_data = []
         x_fit = np.linspace(np.min(xdata),np.max(xdata),1000)
-        y_fit = gaussians(x_fit,popt)
+        y_fit = gaussians(x_fit,*popt)
         print(x_fit)
         print(y_fit)
         self.ax.plot(x_fit,y_fit,'r-')
@@ -192,16 +192,16 @@ def fit(imagename,region):
     #
     # Plot fit
     #
-    #myplot.plot_fit(chans,fluxes,popt,
-    #                xlabel='channel',
-    #                ylabel='peak flux density (Jy/beam)')
+    myplot.plot_fit(chans,fluxes,popt,
+                    xlabel='channel',
+                    ylabel='peak flux density (Jy/beam)')
     #
     # Return results
     #
-    print("Continuum: {0:.2f} Jy/beam".format(popt[0]))
-    print("Spec RMS: {0:.2f} Jy/beam".format(rms))
+    print("Continuum: {0:.2f} mJy/beam".format(1000.*popt[0]))
+    print("Spec RMS: {0:.2f} mJy/beam".format(1000.*rms))
     for i in np.arange(n_gauss):
         print("Gaussian {0}".format(i))
-        print("Peak: {0:.2f} Jy/beam".format(popt[3*i+1]))
+        print("Peak: {0:.2f} mJy/beam".format(1000.*popt[3*i+1]))
         print("Center: {0:.2f} channel".format(popt[3*i+2]))
         print("FWHM: {0:.2f} channel".format(popt[3*i+3]))
