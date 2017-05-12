@@ -121,6 +121,21 @@ class ClickPlot:
         end = self.clickx_data[-1]
         return (start,centers,widths,end)
 
+    def plot_fit(self,xdata,ydata,popt,xlabel=None,ylabel=None):
+        """
+        Using click events to get the gaussian fit estimates
+        """
+        self.ax.clear()
+        self.ax.plot(xdata,ydata,'k-')
+        self.ax.set_xlabel(xlabel)
+        self.ax.set_ylabel(ylabel)
+        self.clickbutton = []
+        self.clickx_data = []
+        self.clicky_data = []
+        x_fit = np.linspace(np.min(xdata),np.max(xdata),1000)
+        y_fit = gaussians(x_fit,popt)
+        self.ax.plot(x_fit,y_fit,'r-')
+
 def fit(imagename,region):
     """
     Fit Gaussian(s) to spectrum extracted from image within a region
@@ -171,9 +186,21 @@ def fit(imagename,region):
         p0_params += [p0_amps[i]]
         p0_params += [p0_centers[i]]
         p0_params += [p0_fwhms[i]]
-    print(p0_params)
     popt, pcov = curve_fit(gaussians,xdata,ydata,p0=p0_params)
+    #
+    # Plot fit
+    #
+    myplot.plot_fit(chans,fluxes,popt,
+                    xlabel='channel',
+                    ylabel='peak flux density (Jy/beam)')
     #
     # Return results
     #
+    print("Continuum: {0:.2f} Jy/beam".format(popt[0]))
+    print("Spec RMS: {0:.2f} Jy/beam".format(rms))
+    for i in np.arange(n_gauss):
+        print("Gaussian {0}".format(i))
+        print("Peak: {0:.2f} Jy/beam".format(popt[3*i+1]))
+        print("Center: {0:.2f} channel".format(popt[3*i+2]))
+        print("FWHM: {0:.2f} channel".format(popt[3*i+3]))
     return (popt[0],popt[1],popt[2],popt[3],rms)
