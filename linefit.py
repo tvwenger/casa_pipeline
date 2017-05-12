@@ -134,9 +134,8 @@ class ClickPlot:
         self.clicky_data = []
         x_fit = np.linspace(np.min(xdata),np.max(xdata),1000)
         y_fit = gaussians(x_fit,*popt)
-        print(x_fit)
-        print(y_fit)
         self.ax.plot(x_fit,y_fit,'r-')
+        self.fig.show()
 
 def fit(imagename,region):
     """
