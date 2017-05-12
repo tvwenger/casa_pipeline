@@ -160,9 +160,9 @@ def fit(imagename,region):
     width_inds = np.array([np.argmin(np.abs(w-chans)) for w in widths])
     xdata = chans[start_ind:end_ind]
     ydata = fluxes[start_ind:end_ind]
-    p0_amps = ydata[center_inds]
-    p0_fwhms = xdata[width_inds]-xdata[center_inds]
-    p0_centers = xdata[center_inds]
+    p0_amps = fluxes[center_inds]
+    p0_fwhms = chans[width_inds]-chans[center_inds]
+    p0_centers = chans[center_inds]
     p0_cont = np.mean(fluxdata)
     popt, pcov = curve_fit(gaussians,xdata,ydata,
                            p0=(p0_amps,p0_centers,p0_fwhms,p0_cont))
