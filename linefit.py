@@ -192,9 +192,9 @@ def fit(imagename,region):
     #
     # Plot fit
     #
-    myplot.plot_fit(chans,fluxes,popt,
-                    xlabel='channel',
-                    ylabel='peak flux density (Jy/beam)')
+    #myplot.plot_fit(chans,fluxes,popt,
+    #                xlabel='channel',
+    #                ylabel='peak flux density (Jy/beam)')
     #
     # Return results
     #
@@ -205,4 +205,3 @@ def fit(imagename,region):
         print("Peak: {0:.2f} Jy/beam".format(popt[3*i+1]))
         print("Center: {0:.2f} channel".format(popt[3*i+2]))
         print("FWHM: {0:.2f} channel".format(popt[3*i+3]))
-    return (popt[0],popt[1],popt[2],popt[3],rms)
