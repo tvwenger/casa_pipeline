@@ -165,6 +165,10 @@ def fit(imagename,region):
     p0_fwhms = chans[width_inds]-chans[center_inds]
     p0_centers = chans[center_inds]
     p0_cont = np.mean(fluxdata)
+    print(p0_amps)
+    print(p0_fwhms)
+    print(p0_centers)
+    print(p0_cont)
     popt, pcov = curve_fit(gaussians,xdata,ydata,
                            p0=(p0_amps,p0_centers,p0_fwhms,p0_cont))
     #
