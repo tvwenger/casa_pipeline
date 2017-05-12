@@ -116,8 +116,8 @@ class ClickPlot:
         if len(self.clickx_data) % 2 != 0:
             self.clickx_data = self.clickx_data[0:-1]
         start = self.clickx_data[0]
-        centers = self.clickx_data[1:-1:2]
-        widths = self.clickx_data[2:-1:2]
+        centers = np.array(self.clickx_data[1:-1:2])
+        widths = np.array(self.clickx_data[2:-1:2])
         end = self.clickx_data[-1]
         return (start,centers,widths,end)
 
