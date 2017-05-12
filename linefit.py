@@ -12,7 +12,7 @@ from scipy.optimize import curve_fit
 
 __VERSION__ = "1.0"
 
-def gaussians(x,cont,*p):
+def gaussians(x,*p):
     # params is amp1, center1, fwhm1, amp2, center2, fwhm2, etc.
     n_gauss = int(len(p)/3)
     y = np.sum([p[i+0]*np.exp(-(x-p[i+1])**2./(2*(p[i+2]/(2.*np.sqrt(2.*np.log(2.))))**2.))
@@ -134,6 +134,8 @@ class ClickPlot:
         self.clicky_data = []
         x_fit = np.linspace(np.min(xdata),np.max(xdata),1000)
         y_fit = gaussians(x_fit,popt)
+        print(x_fit)
+        print(y_fit)
         self.ax.plot(x_fit,y_fit,'r-')
 
 def fit(imagename,region):
