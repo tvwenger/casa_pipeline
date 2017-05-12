@@ -12,12 +12,11 @@ from scipy.optimize import curve_fit
 
 __VERSION__ = "1.0"
 
-def gaussians(x,params):
-    amps,fwhms,centers,cont = params
-    print(amps,fwhms,centers)
-    sigmas = fwhms / (2.*np.sqrt(2.*np.log(2.)))
-    y = np.sum([a*np.exp(-(x-c)**2./(2*s**2.))
-                for a,s,c in zip(amps,sigmas,centers)],axis=0)
+def gaussians(x,cont,*p):
+    # params is amp1, center1, fwhm1, amp2, center2, fwhm2, etc.
+    n_gauss = int(len(p)/3)
+    y = np.sum([p[i+0]*np.exp(-(x-p[i+1])**2./(2*(p[i+2]/(2.*np.sqrt(2.*np.log(2.))))**2.))
+                for i in np.arange(n_gauss)],axis=0)
     y = y + cont
     return y
 
@@ -163,10 +162,13 @@ def fit(imagename,region):
     xdata = chans[start_ind:end_ind]
     ydata = fluxes[start_ind:end_ind]
     p0_amps = fluxes[center_inds]
-    p0_fwhms = chans[width_inds]-chans[center_inds]
     p0_centers = chans[center_inds]
+    p0_fwhms = chans[width_inds]-p0_centers
     p0_cont = np.mean(fluxdata)
-    p0 = ((p0_amps,p0_fwhms,p0_centers,p0_cont))
+    n_gauss = len(p0_amps)
+    p0_params = [p0_amps[i],p0_centers[i],p0_cont[i] for i in np.arange(n_gauss)]
+    p0 = (p0_cont,p0_params)
+    print(p0_params)
     popt, pcov = curve_fit(gaussians,xdata,ydata,p0=p0)
     #
     # Return results
