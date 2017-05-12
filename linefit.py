@@ -134,8 +134,8 @@ def fit(imagename,region):
     """
     stats = casa.imstat(imagename=imagename,region=region,axes=[0,1])
     myplot = ClickPlot(0)
-    chans = range(len(stats['max']))
-    fluxes =  stats['max']
+    chans = np.arange(len(stats['max']))
+    fluxes =  np.array(stats['max'])
     #
     # Get line-free regions
     #
