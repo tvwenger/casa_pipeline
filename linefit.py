@@ -13,11 +13,11 @@ from scipy.optimize import curve_fit
 __VERSION__ = "1.0"
 
 def gaussians(x,*p):
-    # params is amp1, center1, fwhm1, amp2, center2, fwhm2, etc.
-    n_gauss = int(len(p)/3)
-    y = np.sum([p[i+0]*np.exp(-(x-p[i+1])**2./(2*(p[i+2]/(2.*np.sqrt(2.*np.log(2.))))**2.))
+    # params is cont, amp1, center1, fwhm1, amp2, center2, fwhm2, etc.
+    n_gauss = int((len(p)-1)/3)
+    y = np.sum([p[i+1]*np.exp(-(x-p[i+2])**2./(2*(p[i+3]/(2.*np.sqrt(2.*np.log(2.))))**2.))
                 for i in np.arange(n_gauss)],axis=0)
-    y = y + cont
+    y = y + p[0]
     return y
 
 class ClickPlot:
