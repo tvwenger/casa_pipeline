@@ -170,7 +170,7 @@ def fit(imagename,region):
     for i in np.arange(n_gauss):
         p0_params += p0_amps[i]
         p0_params += p0_centers[i]
-        p0_params += p0_fwhm[i]
+        p0_params += p0_fwhms[i]
     p0 = (p0_cont,p0_params)
     print(p0_params)
     popt, pcov = curve_fit(gaussians,xdata,ydata,p0=p0)
