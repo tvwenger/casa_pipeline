@@ -159,6 +159,8 @@ def fit(imagename,region):
     end_ind = np.argmin(np.abs(end-chans))
     center_inds = np.array([np.argmin(np.abs(c-chans)) for c in centers])
     width_inds = np.array([np.argmin(np.abs(w-chans)) for w in widths])
+    print(center_inds)
+    print(width_inds)
     xdata = chans[start_ind:end_ind]
     ydata = fluxes[start_ind:end_ind]
     p0_amps = fluxes[center_inds]
