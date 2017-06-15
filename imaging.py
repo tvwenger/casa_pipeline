@@ -62,6 +62,8 @@ def setup(vis='',config=None):
     robust = config.getfloat("Clean","robust")
     multiscale = [int(foo) for foo in config.get("Clean","multiscale").split(',') if foo != '']
     gain = config.getfloat("Clean","gain")
+    nterms = config.getint("Clean","nterms")
+    outertaper = ["{0}arcsec".format(config.getfloat("Clean","outertaper"))]
     cyclefactor = config.getfloat("Clean","cyclefactor")
     velstart = config.getfloat("Clean","velstart")
     chanwidth = config.getfloat("Clean","chanwidth")
@@ -83,7 +85,8 @@ def setup(vis='',config=None):
                     "velstart":velstart,"chanwidth":chanwidth,
                     "freqstart":freqstart,"freqwidth":freqwidth,
                     "nchan":nchan,"outframe":outframe,"veltype":veltype,
-                    "cvelstart":cvelstart,"cvelnchan":cvelnchan}
+                    "cvelstart":cvelstart,"cvelnchan":cvelnchan,
+                    "nterms":nterms,"outertaper":outertaper}
     return (my_cont_spws,my_line_spws,clean_params)
 
 def regrid_velocity(vis='',spws='',config=None,clean_params={}):
@@ -149,11 +152,12 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     imagename='{0}.cont.clean'.format(field)
     logger.info("MFS cleaning continuum...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
-               threshold='0mJy',niter=10000,interactive=True,
+               threshold='0mJy',niter=10000,interactive=True,nterms=clean_params['nterms'],
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
-               weighting=clean_params['weighting'],robust=clean_params['robust'],               
+               weighting=clean_params['weighting'],robust=clean_params['robust'],
+               uvtaper=True,outertaper=clean_params['outertaper'],
                usescratch=True)
     logger.info("Done.")
     #
@@ -194,6 +198,7 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
+               uvtaper=True,outertaper=clean_params['outertaper'],
                outframe=clean_params['outframe'],usescratch=True)
     logger.info("Done.")
     #
@@ -252,6 +257,7 @@ def dirty_image_line(field='',vis='',spws='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   uvtaper=True,outertaper=clean_params['outertaper'],
                    usescratch=True)
         logger.info("Done.")
         #
@@ -292,6 +298,7 @@ def mfs_clean_line(field='',vis='',spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
+               uvtaper=True,outertaper=clean_params['outertaper'],
                usescratch=True)
     logger.info("Done.")
     #
@@ -350,6 +357,7 @@ def manual_clean_line(field='',vis='',spw='',my_line_spws='',mask='',
                restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                nchan=clean_params['nchan'],
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+               uvtaper=True,outertaper=clean_params['outertaper'],
                usescratch=True,mask=mask)
     logger.info("Done.")
 
@@ -402,6 +410,7 @@ def auto_clean_line(field='',vis='',spws='',my_line_spws='',mask='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   uvtaper=True,outertaper=clean_params['outertaper'],
                    usescratch=True,mask=mask)
         logger.info("Done.")
         #
