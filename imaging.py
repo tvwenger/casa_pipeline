@@ -68,22 +68,17 @@ def setup(vis='',config=None):
     velstart = config.getfloat("Clean","velstart")
     chanwidth = config.getfloat("Clean","chanwidth")
     nchan = config.getint("Clean","nchan")
-    freqstart = config.getfloat("Clean","freqstart")
-    freqwidth = config.getfloat("Clean","freqwidth")
     chanbuffer = config.getint("Clean","chanbuffer")
     cvelstart = "{0}km/s".format(velstart-(chanbuffer*chanwidth))
     velstart = "{0}km/s".format(velstart)
     chanwidth = "{0}km/s".format(chanwidth)
     cvelnchan = nchan+2*chanbuffer
-    freqstart = "{0}MHz".format(freqstart)
-    freqwidth = "{0}MHz".format(freqwidth)
     outframe = config.get("Clean","outframe")
     veltype = config.get("Clean","veltype")
     clean_params = {"lineids":lineids,"restfreqs":restfreqs,"imsize":imsize,
                     "cell":cell,"weighting":weighting,"robust":robust,
                     "multiscale":multiscale,"gain":gain,"cyclefactor":cyclefactor,
                     "velstart":velstart,"chanwidth":chanwidth,
-                    "freqstart":freqstart,"freqwidth":freqwidth,
                     "nchan":nchan,"outframe":outframe,"veltype":veltype,
                     "cvelstart":cvelstart,"cvelnchan":cvelnchan,
                     "nterms":nterms,"outertaper":outertaper}
@@ -164,7 +159,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     # Primary beam correction
     #
     logger.info("Performing primary beam correction...")
-    casa.impbcor(imagename='{0}.image'.format(imagename),
+    casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
                  outfile='{0}.pbcor'.format(imagename))
     logger.info("Done.")
@@ -193,8 +188,7 @@ def clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Cleaning continuum...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=10000,interactive=True,
-               imagermode='csclean',mode='frequency',multiscale=clean_params['multiscale'],
-               start=clean_params['freqstart'],width=clean_params['freqwidth'],
+               imagermode='csclean',mode='channel',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
