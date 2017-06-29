@@ -22,7 +22,7 @@ def setup(vis='',config=None):
     """
     Perform setup tasks: find line and continuum spectral windows
                          get clean parameters
-
+G
     Inputs:
       vis     = measurement set
       config  = ConfigParser object for this project
@@ -263,6 +263,47 @@ def dirty_image_line(field='',vis='',spws='',my_line_spws='',
                      outfile='{0}.pbcor'.format(imagename))
         logger.info("Done.")
 
+def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
+                        clean_params={}):
+    """
+    Dirty image all continuum spws
+
+    Inputs:
+      field        = field to be imaged
+      vis          = measurement set
+      my_cont_spws = comma-separated string of continuum spws
+      clean_params = dictionary of clean parameters
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    for spw in my_cont_spws.split(','):
+        #
+        # Clean continuum
+        #
+        imagename='{0}.spw{1}.cont.clean'.format(field,spw)
+        logger.info("MFS cleaning continuum spw {0}...".format(spw))
+        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
+                   threshold='0mJy',niter=10000,interactive=True,nterms=clean_params['nterms'],
+                   imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                   imsize=clean_params['imsize'],cell=clean_params['cell'],
+                   weighting=clean_params['weighting'],robust=clean_params['robust'],
+                   uvtaper=True,outertaper=clean_params['outertaper'],
+                   usescratch=True)
+        logger.info("Done.")
+        #
+        # Primary beam correction
+        #
+        logger.info("Performing primary beam correction...")
+        casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
+                     pbimage='{0}.flux'.format(imagename),
+                     outfile='{0}.pbcor'.format(imagename))
+        logger.info("Done.")
 
 def mfs_clean_line(field='',vis='',spws='',clean_params={}):
     """
@@ -462,13 +503,14 @@ def main(field,vis='',spws='',config_file=''):
     # Prompt the user with a menu for each option
     #
     while True:
-        print("0. Manually mfs-clean continuum image")
-        print("1. Manually clean continuum cube")
+        print("0. MFS clean combined continuum spws")
+        print("1. Manually clean continuum cube channels")
         print("2. Dirty image selected line cubes")
-        print("3. Manually mfs-clean combined line image")
-        print("4. Manually clean line cube to get clean threshold")
-        print("5. Set line cube clean threshold")
-        print("6. Automatically clean line cubes")
+        print("3. Dirty MFS image continuum spws")
+        print("4. Manually MFS clean combined line spws")
+        print("5. Manually clean line cube to get clean threshold")
+        print("6. Set line cube clean threshold")
+        print("7. Automatically clean line cubes")
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
@@ -480,19 +522,22 @@ def main(field,vis='',spws='',config_file=''):
                              my_line_spws=my_line_spws,
                              clean_params=clean_params,config=config)
         elif answer == '3':
+            mfs_dirty_cont_spws(field=field,vis=vis,my_cont_spws=my_cont_spws,
+                                clean_params=clean_params)
+        elif answer == '4':
             mfs_clean_line(field=field,vis=vis,spws=spws,
                            clean_params=clean_params)
-        elif answer == '4':
+        elif answer == '5':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
             manual_clean_line(field=field,vis=vis,spw=spw,
                               my_line_spws=my_line_spws,
                               mask='{0}.spws_{1}.cont.clean.mask'.format(field,spws),
                               clean_params=clean_params,config=config)
-        elif answer == '5':
+        elif answer == '6':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
-        elif answer == '6':
+        elif answer == '7':
             if threshold is None:
                 logger.warn("Must set threshold first!")
             else:
