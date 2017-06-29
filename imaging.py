@@ -22,7 +22,7 @@ def setup(vis='',config=None):
     """
     Perform setup tasks: find line and continuum spectral windows
                          get clean parameters
-G
+
     Inputs:
       vis     = measurement set
       config  = ConfigParser object for this project
@@ -286,9 +286,9 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
         # Clean continuum
         #
         imagename='{0}.spw{1}.cont.clean'.format(field,spw)
-        logger.info("MFS cleaning continuum spw {0}...".format(spw))
+        logger.info("MFS dirty imaging continuum spw {0}...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-                   threshold='0mJy',niter=10000,interactive=True,nterms=clean_params['nterms'],
+                   threshold='0mJy',niter=0,interactive=False,nterms=clean_params['nterms'],
                    imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
