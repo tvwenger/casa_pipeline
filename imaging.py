@@ -118,10 +118,16 @@ def regrid_velocity(vis='',spws='',config=None,clean_params={}):
         logger.info("Regridding velocity axis of spw {0}".format(spw))
         spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
-        casa.cvel(vis=vis,outputvis=regrid_vis,spw=spw,restfreq=restfreq,mode='velocity',
-                  start=clean_params['cvelstart'],width=clean_params['chanwidth'],
-                  nchan=clean_params['cvelnchan'],outframe=clean_params['outframe'],
-                  veltype=clean_params['veltype'],interpolation='fftshift')
+        casa.cvel2(vis=vis,outputvis=regrid_vis,spw=spw,restfreq=restfreq,mode='velocity',
+                   start=clean_params['cvelstart'],width=clean_params['chanwidth'],
+                   nchan=clean_params['cvelnchan'],outframe=clean_params['outframe'],
+                   veltype=clean_params['veltype'],interpolation='fftshift')
+        #casa.mstransform(vis=vis,outputvis=regrid_vis,datacolumn='data',
+        #                 spw=spw,regridms=True,
+        #                 restfreq=restfreq,mode='velocity',
+        #                 start=clean_params['cvelstart'],width=clean_params['chanwidth'],
+        #                 nchan=clean_params['cvelnchan'],outframe=clean_params['outframe'],
+        #                 veltype=clean_params['veltype'],interpolation='fftshift')
         logger.info("Done.")
 
 def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
@@ -283,9 +289,9 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
     logger = logging.getLogger("main")
     for spw in my_cont_spws.split(','):
         #
-        # Clean continuum
+        # Dirty image continuum
         #
-        imagename='{0}.spw{1}.cont.clean'.format(field,spw)
+        imagename='{0}.spw{1}.cont.dirty'.format(field,spw)
         logger.info("MFS dirty imaging continuum spw {0}...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                    threshold='0mJy',niter=0,interactive=False,nterms=clean_params['nterms'],
@@ -301,6 +307,124 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
         #
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
+                     pbimage='{0}.flux'.format(imagename),
+                     outfile='{0}.pbcor'.format(imagename))
+        logger.info("Done.")
+
+def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
+                        clean_params={}):
+    """
+    Clean all continuum spws
+
+    Inputs:
+      field        = field to be imaged
+      vis          = measurement set
+      my_cont_spws = comma-separated string of continuum spws
+      clean_params = dictionary of clean parameters
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    for spw in my_cont_spws.split(','):
+        #
+        # Clean
+        #
+        imagename='{0}.spw{1}.cont.clean'.format(field,spw)
+        logger.info("Cleaning continuum spw {0}...".format(spw))
+        casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
+                   threshold='0mJy',niter=100000,interactive=True,nterms=clean_params['nterms'],
+                   imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                   imsize=clean_params['imsize'],cell=clean_params['cell'],
+                   weighting=clean_params['weighting'],robust=clean_params['robust'],
+                   uvtaper=True,outertaper=clean_params['outertaper'],
+                   usescratch=True)
+        logger.info("Done.")
+        #
+        # Primary beam correction
+        #
+        logger.info("Performing primary beam correction...")
+        casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
+                     pbimage='{0}.flux'.format(imagename),
+                     outfile='{0}.pbcor'.format(imagename))
+        logger.info("Done.")
+
+def clean_line_spws(field='',vis='',my_line_spws='',
+                    clean_params={},config=None):
+    """
+    Clean all line spws manually
+
+    Inputs:
+      field        = field to be imaged
+      vis          = measurement set
+      my_line_spws = comma-separated string of all line spws
+      clean_params = dictionary of clean parameters
+      config       = ConfigParser object for this project
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    #
+    # check config
+    #
+    if config is None:
+        logger.critical("Error: Need to supply a config")
+        raise ValueError("Config is None")
+    for spw in my_line_spws.split(','):
+        #
+        # Get restfreq
+        #
+        spw_ind = my_line_spws.split(',').index(spw)
+        restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
+        #
+        # clean spw
+        #
+        imagename='{0}.spw{1}.clean'.format(field,spw)
+        logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
+        regrid_vis = vis+'.spw{0}.cvel'.format(spw)
+        #
+        # Need to generate dirty image first because fucking velocity
+        # channels are messed up the first time.
+        #
+        casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
+                   threshold='0mJy',niter=0,interactive=False,
+                   imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                   imsize=clean_params['imsize'],cell=clean_params['cell'],
+                   weighting=clean_params['weighting'],robust=clean_params['robust'],
+                   restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+                   nchan=clean_params['nchan'],
+                   outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   uvtaper=True,outertaper=clean_params['outertaper'],
+                   usescratch=True)
+        #
+        # Now actually clean it
+        #
+        casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
+                   threshold='0mJy',niter=10000,interactive=True,
+                   imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                   imsize=clean_params['imsize'],cell=clean_params['cell'],
+                   weighting=clean_params['weighting'],robust=clean_params['robust'],
+                   restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+                   nchan=clean_params['nchan'],
+                   outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   uvtaper=True,outertaper=clean_params['outertaper'],
+                   usescratch=True)
+        logger.info("Done.")
+        #
+        # Primary beam correction
+        #
+        logger.info("Performing primary beam correction...")
+        casa.impbcor(imagename='{0}.image'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
                      outfile='{0}.pbcor'.format(imagename))
         logger.info("Done.")
@@ -498,7 +622,7 @@ def main(field,vis='',spws='',config_file=''):
     #
     # Regrid velocity axis
     #
-    regrid_velocity(vis=vis,spws=spws,config=config,clean_params=clean_params)
+    #regrid_velocity(vis=vis,spws=spws,config=config,clean_params=clean_params)
     #
     # Prompt the user with a menu for each option
     #
@@ -507,10 +631,12 @@ def main(field,vis='',spws='',config_file=''):
         print("1. Manually clean continuum cube channels")
         print("2. Dirty image selected line cubes")
         print("3. Dirty MFS image continuum spws")
-        print("4. Manually MFS clean combined line spws")
-        print("5. Manually clean line cube to get clean threshold")
-        print("6. Set line cube clean threshold")
-        print("7. Automatically clean line cubes")
+        print("4. Clean continuum spws")
+        print("5. Clean line spws")
+        print("6. Manually MFS clean combined line spws")
+        print("7. Manually clean line cube to get clean threshold")
+        print("8. Set line cube clean threshold")
+        print("9. Automatically clean line cubes")
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
@@ -525,19 +651,25 @@ def main(field,vis='',spws='',config_file=''):
             mfs_dirty_cont_spws(field=field,vis=vis,my_cont_spws=my_cont_spws,
                                 clean_params=clean_params)
         elif answer == '4':
+            mfs_clean_cont_spws(field=field,vis=vis,my_cont_spws=my_cont_spws,
+                                clean_params=clean_params)
+        elif answer == '5':
+            clean_line_spws(field=field,vis=vis,my_line_spws=my_line_spws,
+                            clean_params=clean_params,config=config)
+        elif answer == '6':
             mfs_clean_line(field=field,vis=vis,spws=spws,
                            clean_params=clean_params)
-        elif answer == '5':
+        elif answer == '7':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
             manual_clean_line(field=field,vis=vis,spw=spw,
                               my_line_spws=my_line_spws,
                               mask='{0}.spws_{1}.cont.clean.mask'.format(field,spws),
                               clean_params=clean_params,config=config)
-        elif answer == '6':
+        elif answer == '8':
             print("Please enter the threshold (i.e. 1.1mJy)")
             threshold = raw_input('> ')
-        elif answer == '7':
+        elif answer == '9':
             if threshold is None:
                 logger.warn("Must set threshold first!")
             else:
