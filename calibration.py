@@ -451,6 +451,17 @@ def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[],
     plots = []
     for field in primary_cals+secondary_cals:
         #
+        # Phase vs. Amplitude
+        #
+        casa.plotms(vis=vis,xaxis='amp',yaxis='phase',field=field,
+                    ydatacolumn=datacolumn,iteraxis='spw',
+                    coloraxis='baseline',correlation=config.get('Polarization','Polarization'),
+                    title='PlotID: {0} Field: {1}'.format(plotnum,field),
+                    plotfile='calib_figures/{0}.png'.format(plotnum),
+                    overwrite=True,showgui=False,exprange='all')
+        plots.append({'field':field,'xaxis':'amp','yaxis':'phase','avgtime':'','avgchannel':''})
+        plotnum += 1
+        #
         # Amplitude vs UV-distance (in wavelength units)
         #
         casa.plotms(vis=vis,xaxis='uvwave',yaxis='amp',field=field,

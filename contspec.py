@@ -86,7 +86,7 @@ def smooth_all(field,my_cont_spws='',config=None,overwrite=False,
     bmin = []
     bpa = []
     for spw in my_cont_spws.split(','):
-        lineimage = '{0}.spw{1}.cont.{2}.pbcor'.format(field,spw,linetype)
+        lineimage = '{0}.spw{1}.mfs.{2}.pbcor'.format(field,spw,linetype)
         if not os.path.isdir(lineimage):
             logger.warn("{0} not found!".format(lineimage))
             continue
@@ -100,6 +100,7 @@ def smooth_all(field,my_cont_spws='',config=None,overwrite=False,
     # Smooth available images to maximum beam size + 2*cell_size
     # and mean position angle
     #
+    print("Beam major axes: ",bmaj)
     cell_size = float(config.get("Clean","cell").replace('arcsec',''))
     bmaj_target = np.max(bmaj)+2.*cell_size
     bmin_target = np.max(bmaj)+2.*cell_size
@@ -119,7 +120,7 @@ def smooth_all(field,my_cont_spws='',config=None,overwrite=False,
     bmin_target = {'unit':'arcsec','value':bmin_target}
     bpa_target = {'unit':'deg','value':bpa_target}
     for spw in my_cont_spws.split(','):
-        imagename = '{0}.spw{1}.cont.{2}.pbcor'.format(field,spw,linetype)
+        imagename = '{0}.spw{1}.mfs.{2}.pbcor'.format(field,spw,linetype)
         if os.path.isdir(imagename):
             outfile = '{0}.spw{1}.cont.{2}.imsmooth'.format(field,spw,linetype)
             casa.imsmooth(imagename=imagename,kernel='gauss',
@@ -200,10 +201,11 @@ def plot_sed(field,beam_area,my_cont_spws='',config=None,overwrite=False,
     #
     # Fit spectral index
     #
-    fit,cov = np.polyfit(np.log10(freqs),np.log10(fluxes),deg=1,w=1./np.log10(err_fluxes),cov=True)
+    bad = (np.isnan(fluxes))|(fluxes < 0.)
+    fit,cov = np.polyfit(np.log10(freqs[~bad]),np.log10(fluxes[~bad]),deg=1,w=1./np.log10(err_fluxes[~bad]),cov=True)
     alpha = fit[0]
     e_alpha = np.sqrt(cov[0][0])
-    ax.text(0.1,0.8,r'$\alpha = {0:.2f}\pm{1:.2f}$'.format(alpha,e_alpha),transform=ax.transAxes)
+    ax.text(0.1,0.8,r'$\alpha = {0:.2f} \pm {1:.2f}$'.format(alpha,e_alpha),transform=ax.transAxes)
     #
     # Labels and save
     #
