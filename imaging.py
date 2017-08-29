@@ -121,7 +121,7 @@ def regrid_velocity(vis='',spws='',config=None,clean_params={}):
         casa.cvel2(vis=vis,outputvis=regrid_vis,spw=spw,restfreq=restfreq,mode='velocity',
                    start=clean_params['cvelstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['cvelnchan'],outframe=clean_params['outframe'],
-                   veltype=clean_params['veltype'],interpolation='cubic')
+                   veltype=clean_params['veltype'],interpolation='linear')
         #casa.mstransform(vis=vis,outputvis=regrid_vis,datacolumn='data',
         #                 spw=spw,regridms=True,
         #                 restfreq=restfreq,mode='velocity',

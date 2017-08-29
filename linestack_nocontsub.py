@@ -70,11 +70,11 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False,
     logger = logging.getLogger("main")
     logger.info("Smoothing each line spw to common beam")
     for spw in my_line_spws.split(','):
-        imagename='{0}.spw{1}.{2}.pbcor'.format(field,spw,linetype)
+        imagename='{0}.spw{1}.channel.{2}.pbcor'.format(field,spw,linetype)
         if not os.path.isdir(imagename):
             logger.warn("{0} was not found!".format(imagename))
             continue
-        outfile='{0}.spw{1}.{2}.pbcor.combeam'.format(field,spw,linetype)
+        outfile='{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(outfile):
             if overwrite:
                 logger.info("Overwriting {0}".format(outfile))
@@ -121,8 +121,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
     bmaj = []
     bmin = []
     bpa = []
-    contimage = '{0}.cont.clean.pbcor'.format(field)
-    print(contimage)
+    contimage = '{0}.cont.mfs.clean.pbcor'.format(field)
     if not os.path.isdir(contimage):
         logger.warn("{0} not found!".format(contimage))
     else:
@@ -133,7 +132,7 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
         bpa.append(casa.imhead(imagename=contimage,mode='get',
                                hdkey='beampa')['value'])
     for spw in my_line_spws.split(','):
-        lineimage = '{0}.spw{1}.{2}.pbcor.combeam'.format(field,spw,linetype)
+        lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if not os.path.isdir(lineimage):
             logger.warn("{0} not found!".format(lineimage))
             continue
@@ -158,16 +157,16 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
     bmaj_target = {'unit':'arcsec','value':bmaj_target}
     bmin_target = {'unit':'arcsec','value':bmin_target}
     bpa_target = {'unit':'deg','value':bpa_target}
-    contimage = '{0}.cont.clean.pbcor'.format(field)
+    contimage = '{0}.cont.mfs.clean.pbcor'.format(field)
     if os.path.isdir(contimage):
-        outfile='{0}.cont.imsmooth'.format(field)
+        outfile='{0}.cont.mfs.imsmooth'.format(field)
         casa.imsmooth(imagename=contimage,kernel='gauss',
                       targetres=True,major=bmaj_target,minor=bmin_target,
                       pa=bpa_target,outfile=outfile,overwrite=overwrite)
     for spw,lineid in zip(my_line_spws.split(','),config.get('Clean','lineids').split(',')):
-        lineimage = '{0}.spw{1}.{2}.pbcor.combeam'.format(field,spw,linetype)
+        lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(lineimage):
-            outfile = '{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype)
+            outfile = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
             casa.imsmooth(imagename=lineimage,kernel='gauss',
                           targetres=True,major=bmaj_target,minor=bmin_target,
                           pa=bpa_target,outfile=outfile,overwrite=overwrite)
@@ -197,10 +196,10 @@ def stack_line(field,lineids=[],config=None,overwrite=False,
     if len(lineids) == 0:
         lineids = config.get("Clean","lineids").split(',')
     logger.info("Stacking lines {0}".format(lineids))
-    images = ['{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
+    images = ['{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
     ims = ['IM{0}'.format(foo) for foo in range(len(images))]
     myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
-    outfile='{0}.Halpha_{1}lines.{2}.image'.format(field,str(len(images)),linetype)
+    outfile='{0}.Halpha_{1}lines.channel.{2}.image'.format(field,str(len(images)),linetype)
     casa.immath(imagename=images,outfile=outfile,mode='evalexpr',
                 expr=myexp)
     logger.info("Done!")
@@ -257,7 +256,7 @@ def linetocont_image(field,moment0image='',overwrite=False,
     if not os.path.isdir(moment0image):
         logger.warn("{0} does not exist".format(moment0image))
         return
-    contimage='{0}.cont.imsmooth'.format(field)
+    contimage='{0}.cont.mfs.imsmooth'.format(field)
     if not os.path.isdir(contimage):
         logger.warn("{0} does not exist".format(contimage))
         return
