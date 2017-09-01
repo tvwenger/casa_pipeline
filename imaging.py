@@ -589,7 +589,7 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
         logger.info("Done.")
 
 def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
-                           clean_params={},config=None):
+                           mask='',clean_params={},config=None):
     """
     Clean all line spws manually
 
@@ -598,6 +598,7 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
       vis          = measurement set
       spw          = spw to clean
       my_line_spws = comma-separated string of all line spws
+      mask         = clean mask to use
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
 
@@ -651,7 +652,8 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
                restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                nchan=clean_params['nchan'],
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=True,outertaper=clean_params['outertaper'],
+               mask=mask)
     logger.info("Done.")
     #
     # Primary beam correction
@@ -698,7 +700,7 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',mask='',
         #
         # clean spw
         #
-        imagename='{0}.spw{1}.clean'.format(field,spw)
+        imagename='{0}.spw{1}.channel.clean'.format(field,spw)
         logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',

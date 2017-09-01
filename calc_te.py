@@ -177,13 +177,13 @@ def calc_te(imagename,region,freq=None):
     # Import spectrum and plot it
     #
     specdata = np.genfromtxt(logfile,comments='#',dtype=None,
-                                               names=('channel','npts','freq','velocity','flux'))
+                             names=('channel','npts','freq','velocity','flux'))
     myplot = ClickPlot(1)
     #
     # Get line-free regions
     #
     regions = myplot.get_line_free_regions(specdata['velocity'],specdata['flux'],
-                                                                    xlabel='Velocity (km/s)',ylabel='Flux (Jy)',title=imagename)
+                                           xlabel='Velocity (km/s)',ylabel='Flux (Jy)',title=imagename)
     #
     # Extract line free velocity and flux
     #
@@ -290,7 +290,7 @@ def main(field,lineids=[],linetype='dirty',outfile='electron_temps.txt'):
             #
             # Generate file names
             # 
-            imagename = '{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype)
+            imagename = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
             te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
                 cont_brightness, rms, freq = calc_te(imagename,region)
             f.write('{0:13} {1:5.3f} {2:5.2f} {3:6.2f} {4:9.2f} {5:11.2f} {6:5.2f} {7:6.2f} {8:9.3f} {9:11.3f} {10:7.1f} {11:7.1f}\n'.\
@@ -301,7 +301,7 @@ def main(field,lineids=[],linetype='dirty',outfile='electron_temps.txt'):
         # Compute electron temperature for stacked line image
         #
         lineid = 'Halpha_{0}lines'.format(len(lineids))
-        imagename = '{0}.{1}.{2}.image'.format(field,lineid,linetype)
+        imagename = '{0}.{1}.channel.{2}.image'.format(field,lineid,linetype)
         te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
                 cont_brightness, rms, freq = calc_te(imagename,region,freq=np.mean(freqs))
         f.write('{0:13} {1:5.3f} {2:5.2f} {3:6.2f} {4:9.2f} {5:11.2f} {6:5.2f} {7:6.2f} {8:9.3f} {9:11.3f} {10:7.1f} {11:7.1f}\n'.\
