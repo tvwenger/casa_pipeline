@@ -12,11 +12,19 @@ import logging
 import logging.config
 import ConfigParser
 import shutil
+import matplotlib.pyplot as plt
 
 __VERSION__ = "1.0"
 
 # load logging configuration file
 logging.config.fileConfig('logging.conf')
+
+# Maximum number of iterations allowed for cleaning (prevents
+# endless auto-cleaning when there is a problem).
+_MAX_ITER = 500
+
+# Number of iterations per cycle during interactive clean
+_NPERCYCLE = 10
 
 def setup(vis='',config=None):
     """
@@ -75,12 +83,17 @@ def setup(vis='',config=None):
     cvelnchan = nchan+2*chanbuffer
     outframe = config.get("Clean","outframe")
     veltype = config.get("Clean","veltype")
+    freqstart = "{0}MHz".format(config.getfloat("Clean","freqstart"))
+    freqwidth = "{0}MHz".format(config.getfloat("Clean","freqwidth"))
+    nfreqchan = config.getint("Clean","nfreqchan")
     clean_params = {"lineids":lineids,"restfreqs":restfreqs,"imsize":imsize,
                     "cell":cell,"weighting":weighting,"robust":robust,
                     "multiscale":multiscale,"gain":gain,"cyclefactor":cyclefactor,
                     "velstart":velstart,"chanwidth":chanwidth,
                     "nchan":nchan,"outframe":outframe,"veltype":veltype,
                     "cvelstart":cvelstart,"cvelnchan":cvelnchan,
+                    "freqstart":freqstart,"freqwidth":freqwidth,
+                    "nfreqchan":nfreqchan,
                     "nterms":nterms,"outertaper":outertaper}
     return (my_cont_spws,my_line_spws,clean_params)
 
@@ -148,7 +161,7 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     #
     logger = logging.getLogger("main")
     #
-    # Clean continuum
+    # Dirty image continuum
     #
     imagename='{0}.cont.mfs.dirty'.format(field)
     logger.info("Generating dirty continuum image (MFS)...")
@@ -166,7 +179,16 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Performing primary beam correction...")
     casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
-                 outfile='{0}.pbcor'.format(imagename))
+                 outfile='{0}.pbcor'.format(imagename),
+                 overwrite=True)
+    logger.info("Done.")
+    #
+    # Export to fits
+    #
+    logger.info("Exporting fits file...")
+    casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                    fitsimage='{0}.pbcor.fits'.format(imagename),
+                    overwrite=True)
     logger.info("Done.")
 
 def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
@@ -187,9 +209,9 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     #
     logger = logging.getLogger("main")
     #
-    # Clean continuum
+    # Dirty image continuum
     #
-    imagename='{0}.cont.chan.dirty'.format(field)
+    imagename='{0}.cont.channel.dirty'.format(field)
     logger.info("Generating dirty continuum cube (channel)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=0,interactive=False,
@@ -197,8 +219,7 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'],
-               outframe=clean_params['outframe'])
+               uvtaper=True,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -206,7 +227,16 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Performing primary beam correction...")
     casa.impbcor(imagename='{0}.image'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
-                 outfile='{0}.pbcor'.format(imagename))
+                 outfile='{0}.pbcor'.format(imagename),
+                 overwrite=True)
+    logger.info("Done.")
+    #
+    # Export to fits
+    #
+    logger.info("Exporting fits file...")
+    casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                    fitsimage='{0}.pbcor.fits'.format(imagename),
+                    overwrite=True)
     logger.info("Done.")
 
 def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
@@ -232,7 +262,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     imagename='{0}.cont.mfs.clean'.format(field)
     logger.info("Cleaning continuum image (MFS)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
-               threshold='0mJy',niter=10000,interactive=True,nterms=clean_params['nterms'],
+               threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,nterms=clean_params['nterms'],
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -245,7 +275,16 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Performing primary beam correction...")
     casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
-                 outfile='{0}.pbcor'.format(imagename))
+                 outfile='{0}.pbcor'.format(imagename),
+                 overwrite=True)
+    logger.info("Done.")
+    #
+    # Export to fits
+    #
+    logger.info("Exporting fits file...")
+    casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                    fitsimage='{0}.pbcor.fits'.format(imagename),
+                    overwrite=True)
     logger.info("Done.")
 
 def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
@@ -268,16 +307,15 @@ def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     #
     # Clean continuum
     #
-    imagename='{0}.cont.chan.clean'.format(field)
+    imagename='{0}.cont.channel.clean'.format(field)
     logger.info("Cleaning continuum cube (channel)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
-               threshold='0mJy',niter=10000,interactive=True,
+               threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,
                imagermode='csclean',mode='channel',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'],
-               outframe=clean_params['outframe'])
+               uvtaper=True,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -285,7 +323,16 @@ def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Performing primary beam correction...")
     casa.impbcor(imagename='{0}.image'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
-                 outfile='{0}.pbcor'.format(imagename))
+                 outfile='{0}.pbcor'.format(imagename),
+                 overwrite=True)
+    logger.info("Done.")
+    #
+    # Export to fits
+    #
+    logger.info("Exporting fits file...")
+    casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                    fitsimage='{0}.pbcor.fits'.format(imagename),
+                    overwrite=True)
     logger.info("Done.")
 
 def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
@@ -308,7 +355,7 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
     logger = logging.getLogger("main")
     for spw in my_cont_spws.split(','):
         #
-        # Clean
+        # Dirty image
         #
         imagename='{0}.spw{1}.mfs.dirty'.format(field,spw)
         logger.info("Generating dirty image of spw {0} (MFS)...".format(spw))
@@ -326,7 +373,16 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
-                     outfile='{0}.pbcor'.format(imagename))
+                     outfile='{0}.pbcor'.format(imagename),
+                     overwrite=True)
+        logger.info("Done.")
+        #
+        # Export to fits
+        #
+        logger.info("Exporting fits file...")
+        casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                        fitsimage='{0}.pbcor.fits'.format(imagename),
+                        overwrite=True)
         logger.info("Done.")
 
 def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
@@ -354,7 +410,7 @@ def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         imagename='{0}.spw{1}.mfs.clean'.format(field,spw)
         logger.info("Cleaning continuum spw {0} (MFS)...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-                   threshold='0mJy',niter=100000,interactive=True,nterms=clean_params['nterms'],
+                   threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,nterms=clean_params['nterms'],
                    imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -367,10 +423,19 @@ def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
-                     outfile='{0}.pbcor'.format(imagename))
+                     outfile='{0}.pbcor'.format(imagename),
+                     overwrite=True)
+        logger.info("Done.")
+        #
+        # Export to fits
+        #
+        logger.info("Exporting fits file...")
+        casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                        fitsimage='{0}.pbcor.fits'.format(imagename),
+                        overwrite=True)
         logger.info("Done.")
 
-def mfs_clean_cont_spw(field='',vis='',spw='',mask='',
+def mfs_clean_cont_spw(field='',vis='',spw='',
                         clean_params={}):
     """
     Clean single continuum spw (MFS)
@@ -379,7 +444,6 @@ def mfs_clean_cont_spw(field='',vis='',spw='',mask='',
       field        = field to be imaged
       vis          = measurement set
       spw          = spectral window to clean
-      mask         = clean mask
       clean_params = dictionary of clean parameters
 
     Returns:
@@ -395,13 +459,12 @@ def mfs_clean_cont_spw(field='',vis='',spw='',mask='',
     imagename='{0}.spw{1}.mfs.clean'.format(field,spw)
     logger.info("Cleaning continuum spw {0} (MFS)...".format(spw))
     casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-               threshold='0mJy',niter=100000,interactive=True,nterms=clean_params['nterms'],
+               threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,nterms=clean_params['nterms'],
                imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'],
-               mask=mask)
+               uvtaper=True,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -409,21 +472,32 @@ def mfs_clean_cont_spw(field='',vis='',spw='',mask='',
     logger.info("Performing primary beam correction...")
     casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
-                 outfile='{0}.pbcor'.format(imagename))
+                 outfile='{0}.pbcor'.format(imagename),
+                 overwrite=True)
+    logger.info("Done.")
+    #
+    # Export to fits
+    #
+    logger.info("Exporting fits file...")
+    casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                    fitsimage='{0}.pbcor.fits'.format(imagename),
+                    overwrite=True)
     logger.info("Done.")
 
 def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
-                             threshold='',mask='',
+                             manual_spw='',threshold='',
                              clean_params={}):
     """
-    Clean each continuum spw (MFS)
+    Clean each continuum spw (MFS) using mask and threshold determined
+    from manually cleaning another continuum spw. Delete that
+    continuum spw so each is automatically cleaned in the same way.
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
+      manual_spw   = spectral window that was cleaned manually
       threshold    = clean threshold
-      mask         = clean mask
       clean_params = dictionary of clean parameters
 
     Returns:
@@ -433,6 +507,23 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
     # start logger
     #
     logger = logging.getLogger("main")
+    #
+    # Use mask from manually cleaned spw
+    #
+    mask = '{0}.spw{1}.mfs.clean.mask'.format(field,manual_spw)
+    #
+    # Delete image of manually cleaned spw
+    #
+    imagename = '{0}.spw{1}.mfs.clean'.format(field,manual_spw)
+    shutil.rmtree('{0}.image'.format(imagename))
+    shutil.rmtree('{0}.pbcor'.format(imagename))
+    shutil.rmtree('{0}.residual'.format(imagename))
+    shutil.rmtree('{0}.model'.format(imagename))
+    shutil.rmtree('{0}.psf'.format(imagename))
+    shutil.rmtree('{0}.flux'.format(imagename))
+    #
+    # Loop over spectral windows
+    #
     for spw in my_cont_spws.split(','):
         #
         # Clean
@@ -440,7 +531,7 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         imagename='{0}.spw{1}.mfs.clean'.format(field,spw)
         logger.info("Automatically cleaning continuum spw {0} (MFS)...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
-                   threshold=threshold,niter=100000,interactive=False,nterms=clean_params['nterms'],
+                   threshold=threshold,niter=_MAX_ITER,interactive=False,nterms=clean_params['nterms'],
                    imagermode='csclean',mode='mfs',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -454,7 +545,16 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image.tt0'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
-                     outfile='{0}.pbcor'.format(imagename))
+                     outfile='{0}.pbcor'.format(imagename),
+                     overwrite=True)
+        logger.info("Done.")
+        #
+        # Export to fits
+        #
+        logger.info("Exporting fits file...")
+        casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                        fitsimage='{0}.pbcor.fits'.format(imagename),
+                        overwrite=True)
         logger.info("Done.")
 
 def channel_dirty_line_spws(field='',vis='',my_line_spws='',
@@ -489,7 +589,7 @@ def channel_dirty_line_spws(field='',vis='',my_line_spws='',
         spw_ind = my_line_spws.split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         #
-        # clean spw
+        # dirty image spw
         #
         imagename='{0}.spw{1}.channel.dirty'.format(field,spw)
         logger.info("Dirty imaging spw {0} (restfreq: {1})...".format(spw,restfreq))
@@ -511,7 +611,16 @@ def channel_dirty_line_spws(field='',vis='',my_line_spws='',
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
-                     outfile='{0}.pbcor'.format(imagename))
+                     outfile='{0}.pbcor'.format(imagename),
+                     overwrite=True)
+        logger.info("Done.")
+        #
+        # Export to fits
+        #
+        logger.info("Exporting fits file...")
+        casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                        fitsimage='{0}.pbcor.fits'.format(imagename),
+                        velocity=True,overwrite=True)
         logger.info("Done.")
 
 def channel_clean_line_spws(field='',vis='',my_line_spws='',
@@ -569,7 +678,7 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
         # Now actually clean it
         #
         casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
-                   threshold='0mJy',niter=10000,interactive=True,
+                   threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,
                    imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -585,20 +694,29 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
-                     outfile='{0}.pbcor'.format(imagename))
+                     outfile='{0}.pbcor'.format(imagename),
+                     overwrite=True)
+        logger.info("Done.")
+        #
+        # Export to fits
+        #
+        logger.info("Exporting fits file...")
+        casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                        fitsimage='{0}.pbcor.fits'.format(imagename),
+                        velocity=True,overwrite=True)
         logger.info("Done.")
 
+
 def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
-                           mask='',clean_params={},config=None):
+                           clean_params={},config=None):
     """
-    Clean all line spws manually
+    Clean single line spws manually
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
       spw          = spw to clean
       my_line_spws = comma-separated string of all line spws
-      mask         = clean mask to use
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
 
@@ -644,7 +762,7 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
     # Now actually clean it
     #
     casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
-               threshold='0mJy',niter=10000,interactive=True,
+               threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,
                imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -652,8 +770,7 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
                restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                nchan=clean_params['nchan'],
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-               uvtaper=True,outertaper=clean_params['outertaper'],
-               mask=mask)
+               uvtaper=True,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -661,21 +778,35 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
     logger.info("Performing primary beam correction...")
     casa.impbcor(imagename='{0}.image'.format(imagename),
                  pbimage='{0}.flux'.format(imagename),
-                 outfile='{0}.pbcor'.format(imagename))
+                 outfile='{0}.pbcor'.format(imagename),
+                 overwrite=True)
+    logger.info("Done.")
+    #
+    # Export to fits
+    #
+    logger.info("Exporting fits file...")
+    casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                    fitsimage='{0}.pbcor.fits'.format(imagename),
+                    velocity=True,overwrite=True)
     logger.info("Done.")
 
-def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',mask='',
-                                 clean_params={},threshold='',config=None):
+
+def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
+                                 manual_spw='',threshold='',
+                                 clean_params={},config=None):
     """
-    Clean all line spws non-interactively
+    Clean all line spws non-interactively using clean mask and threshold
+    determined by manually cleaning a single line spectral window.
+    Delete the image of that manually cleaned spw so each spw is
+    cleaned uniformly.
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
       my_line_spws = comma-separated string of line spws
-      mask         = clean mask to use
-      clean_params = dictionary of clean parameters
+      manual_spw   = spw that was cleaned manually
       threshold    = clean threshold
+      clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
 
     Returns:
@@ -691,6 +822,23 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',mask='',
     if config is None:
         logger.critical("Error: Need to supply a config")
         raise ValueError("Config is None") 
+    #
+    # Use mask from manually cleaned spw
+    #
+    mask = '{0}.spw{1}.channel.clean.mask'.format(field,manual_spw)
+    #
+    # Delete image of manually cleaned spw
+    #
+    imagename = '{0}.spw{1}.channel.clean'.format(field,manual_spw)
+    shutil.rmtree('{0}.image'.format(imagename))
+    shutil.rmtree('{0}.pbcor'.format(imagename))
+    shutil.rmtree('{0}.residual'.format(imagename))
+    shutil.rmtree('{0}.model'.format(imagename))
+    shutil.rmtree('{0}.psf'.format(imagename))
+    shutil.rmtree('{0}.flux'.format(imagename))
+    #
+    # Loop over spectral windows
+    #
     for spw in my_line_spws.split(','):
         #
         # Get restfreq
@@ -698,13 +846,12 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',mask='',
         spw_ind = my_line_spws.split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         #
-        # clean spw
+        # Dirty image so we can copy mask
         #
         imagename='{0}.spw{1}.channel.clean'.format(field,spw)
-        logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
-                   threshold=threshold,niter=10000,interactive=False,
+                   threshold=threshold,niter=0,interactive=False,
                    imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
@@ -712,8 +859,31 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',mask='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   uvtaper=True,outertaper=clean_params['outertaper'],
-                   mask=mask)
+                   uvtaper=True,outertaper=clean_params['outertaper'])
+        #
+        # Copy mask
+        #
+        logger.info("Copying mask for spw {0}...".format(spw,restfreq))
+        casa.makemask(mode='expand',
+                      inpimage='{0}.image'.format(imagename),
+                      inpmask=mask,
+                      output='{0}.mask'.format(imagename),
+                      inpfreqs=[0])
+        logger.info("Done.")
+        #
+        # clean spw
+        #
+        logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
+        casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
+                   threshold=threshold,niter=_MAX_ITER,interactive=False,
+                   imagermode='csclean',mode='velocity',multiscale=clean_params['multiscale'],
+                   gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
+                   imsize=clean_params['imsize'],cell=clean_params['cell'],
+                   weighting=clean_params['weighting'],robust=clean_params['robust'],
+                   restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
+                   nchan=clean_params['nchan'],
+                   outframe=clean_params['outframe'],veltype=clean_params['veltype'],
+                   uvtaper=True,outertaper=clean_params['outertaper'])
         logger.info("Done.")
         #
         # Primary beam correction
@@ -721,10 +891,20 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',mask='',
         logger.info("Performing primary beam correction...")
         casa.impbcor(imagename='{0}.image'.format(imagename),
                      pbimage='{0}.flux'.format(imagename),
-                     outfile='{0}.pbcor'.format(imagename))
+                     outfile='{0}.pbcor'.format(imagename),
+                     overwrite=True)
+        logger.info("Done.")
+        #
+        # Export to fits
+        #
+        logger.info("Exporting fits file...")
+        casa.exportfits(imagename='{0}.pbcor'.format(imagename),
+                        fitsimage='{0}.pbcor.fits'.format(imagename),
+                        velocity=True,overwrite=True)
         logger.info("Done.")
 
-def contplot(field,my_cont_spws=''):
+
+def contplot(field,my_cont_spws='',clean_params={}):
     """
     Generate pdf document of continuum diagnostic plots:
     1. Dirty image
@@ -737,6 +917,7 @@ def contplot(field,my_cont_spws=''):
     Inputs:
       field  = field we're plotting
       my_cont_spws = continuum spectral windows
+      clean_params = dictionary of clean parameters
 
     Returns:
       Nothing
@@ -746,6 +927,11 @@ def contplot(field,my_cont_spws=''):
     #
     logger = logging.getLogger("main")
     goodplots = []
+    center_x = int(clean_params['imsize'][0]/2)
+    center_y = int(clean_params['imsize'][1]/2)
+    blc = [center_x-int(center_x/2),center_y-int(center_y/2)]
+    trc = [center_x+int(center_x/2),center_y+int(center_y/2)]
+    zoom = {'blc':blc,'trc':trc}
     #
     # Generate combined continuum spw images
     #
@@ -757,7 +943,7 @@ def contplot(field,my_cont_spws=''):
               'colormap':'Greyscale 2',
               'colorwedge':True}
     out = '{0}.cont.mfs.dirty.image.png'.format(field)
-    casa.imview(raster=raster,zoom=2,out=out)
+    casa.imview(raster=raster,zoom=zoom,out=out)
     if os.path.exists(out): goodplots.append(out)
     #
     # Clean image
@@ -766,7 +952,7 @@ def contplot(field,my_cont_spws=''):
               'colormap':'Greyscale 2',
               'colorwedge':True}
     out = '{0}.cont.mfs.clean.image.png'.format(field)
-    casa.imview(raster=raster,zoom=2,out=out)
+    casa.imview(raster=raster,zoom=zoom,out=out)
     if os.path.exists(out): goodplots.append(out)
     #
     # Residual image
@@ -775,7 +961,7 @@ def contplot(field,my_cont_spws=''):
               'colormap':'Greyscale 2',
               'colorwedge':True}
     out = '{0}.cont.mfs.clean.residual.png'.format(field)
-    casa.imview(raster=raster,zoom=2,out=out)
+    casa.imview(raster=raster,zoom=zoom,out=out)
     if os.path.exists(out): goodplots.append(out)
     #
     # Alpha image
@@ -785,7 +971,7 @@ def contplot(field,my_cont_spws=''):
               'colorwedge':True,
               'range':[-5,5]}
     out = '{0}.cont.mfs.clean.alpha.png'.format(field)
-    casa.imview(raster=raster,zoom=2,out=out)
+    casa.imview(raster=raster,zoom=zoom,out=out)
     if os.path.exists(out): goodplots.append(out)
     #
     # Alpha error
@@ -795,7 +981,7 @@ def contplot(field,my_cont_spws=''):
               'colorwedge':True,
               'range':[0,1]}
     out = '{0}.cont.mfs.clean.alpha.error.png'.format(field)
-    casa.imview(raster=raster,zoom=2,out=out)
+    casa.imview(raster=raster,zoom=zoom,out=out)
     if os.path.exists(out): goodplots.append(out)
     #
     # Beta image
@@ -805,7 +991,7 @@ def contplot(field,my_cont_spws=''):
               'colorwedge':True,
               'range':[-5,5]}
     out = '{0}.cont.mfs.clean.beta.png'.format(field)
-    casa.imview(raster=raster,zoom=2,out=out)
+    casa.imview(raster=raster,zoom=zoom,out=out)
     if os.path.exists(out): goodplots.append(out)
     logger.info("Done.")
     #
@@ -820,7 +1006,7 @@ def contplot(field,my_cont_spws=''):
                   'colormap':'Greyscale 2',
                   'colorwedge':True}
         out = '{0}.spw{1}.mfs.dirty.image.png'.format(field,spw)
-        casa.imview(raster=raster,zoom=2,out=out)
+        casa.imview(raster=raster,zoom=zoom,out=out)
         if os.path.exists(out): goodplots.append(out)
         #
         # Clean image
@@ -829,7 +1015,7 @@ def contplot(field,my_cont_spws=''):
                   'colormap':'Greyscale 2',
                   'colorwedge':True}
         out = '{0}.spw{1}.mfs.clean.image.png'.format(field,spw)
-        casa.imview(raster=raster,zoom=2,out=out)
+        casa.imview(raster=raster,zoom=zoom,out=out)
         if os.path.exists(out): goodplots.append(out)
         #
         # Residual image
@@ -838,7 +1024,7 @@ def contplot(field,my_cont_spws=''):
                   'colormap':'Greyscale 2',
                   'colorwedge':True}
         out = '{0}.spw{1}.mfs.clean.residual.png'.format(field,spw)
-        casa.imview(raster=raster,zoom=2,out=out)
+        casa.imview(raster=raster,zoom=zoom,out=out)
         if os.path.exists(out): goodplots.append(out)
         logger.info("Done.")
     #
@@ -866,6 +1052,87 @@ def contplot(field,my_cont_spws=''):
             f.write(r"\clearpage"+"\n")
         f.write(r"\end{document}")
     os.system('pdflatex -interaction=batchmode {0}.contplots.tex'.format(field))
+    logger.info("Done.")
+
+def lineplot(field,my_line_spws='',clean_params={}):
+    """
+    Generate pdf document of spectral line diagnostic plots:
+    For each spectral window
+    1. spectrum, center pixel
+
+    Inputs:
+      field  = field we're plotting
+      my_line_spws = line spectral windows
+      clean_params = dictionary of clean parameters
+
+    Returns:
+      Nothing
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    goodplots = []
+    center_x = int(clean_params['imsize'][0]/2)
+    center_y = int(clean_params['imsize'][1]/2)
+    blc = [center_x-int(center_x/2),center_y-int(center_y/2)]
+    trc = [center_x+int(center_x/2),center_y+int(center_y/2)]
+    center_chan = int(clean_params['nchan']/2)
+    zoom = {'channel':center_chan,'blc':blc,'trc':trc}
+    #
+    # Loop over spws and generate images
+    #
+    for spw,lineid in zip(my_line_spws.split(','),clean_params['lineids']):
+        logger.info("Generating spw {0} line images...".format(spw))
+        #
+        # Center pixel spectrum
+        #
+        imagename = '{0}.spw{1}.channel.clean.image'.format(field,spw)
+        specfile = '{0}.spw{1}.channel.clean.image.specflux'.format(field,spw)
+        region='circle[[100pix,100pix],0.1pix]'
+        casa.specflux(imagename=imagename,region=region,function='mean',
+                      unit='km/s',logfile=specfile,overwrite=True)
+        if os.path.exists(specfile):
+            spec = np.genfromtxt(specfile,dtype=None,comments='#',
+                                 names=['channel','npix','frequency',
+                                        'velocity','flux'])
+            plt.ioff()
+            fig,ax = plt.subplots()
+            ax.plot(spec['velocity'],1000.*spec['flux'],'k-')
+            ax.set_xlabel('Velocity (km/s)')
+            ax.set_ylabel('Flux (mJy)')
+            ax.set_xlim(np.min(spec['velocity']),np.max(spec['velocity']))
+            ax.set_title(lineid)
+            out = '{0}.spw{1}.channel.clean.specflux.png'.format(field,spw)
+            fig.savefig(out)
+            plt.close(fig)
+            plt.ion()
+            goodplots.append(out)
+    #
+    # Generate PDF of plots
+    #
+    # need to fix filenames so LaTeX doesn't complain
+    for i in range(len(goodplots)):
+        goodplots[i] = '{'+goodplots[i].split('.png')[0]+'}.png'
+    logger.info("Generating PDF...")
+    with open('{0}.lineplots.tex'.format(field),'w') as f:
+        f.write(r"\documentclass{article}"+"\n")
+        f.write(r"\usepackage{graphicx}"+"\n")
+        f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
+        f.write(r"\begin{document}"+"\n")
+        for i in range(0,len(goodplots),6):
+            f.write(r"\begin{figure}"+"\n")
+            f.write(r"\centering"+"\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i]+"}\n")
+            if len(goodplots) > i+1: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+1]+"}\n")
+            if len(goodplots) > i+2: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+2]+"}\n")
+            if len(goodplots) > i+3: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+3]+"}\n")
+            if len(goodplots) > i+4: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+4]+"}\n")
+            if len(goodplots) > i+5: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+5]+"}\n")
+            f.write(r"\end{figure}"+"\n")
+            f.write(r"\clearpage"+"\n")
+        f.write(r"\end{document}")
+    os.system('pdflatex -interaction=batchmode {0}.lineplots.tex'.format(field))
     logger.info("Done.")
 
 def main(field,vis='',config_file=''):
@@ -900,8 +1167,6 @@ def main(field,vis='',config_file=''):
     #
     # initial setup
     #
-    cont_threshold = None
-    line_threshold = None
     my_cont_spws,my_line_spws,clean_params = setup(vis=vis,config=config)
     #
     # Regrid velocity axis
@@ -918,14 +1183,13 @@ def main(field,vis='',config_file=''):
         print("4.  Dirty image each continuum spw (MFS)")
         print("5.  Manually clean each continuum spw (MFS)")
         print("6.  Manually clean single continuum spw (MFS)")
-        print("7.  Set continuum spw clean threshold")
-        print("8.  Automatically clean each continuum spw (MFS)")
-        print("9.  Dirty image each line spw (channel)")
-        print("10. Manually clean each line spw (channel)")
-        print("11. Manually clean single line spw (channel)")
-        print("12. Set line spw clean threshold")
-        print("13. Automatically clean each line spw (channel)")
-        print("14. Generate continuum diagnostic plots")
+        print("7.  Automatically clean each continuum spw (MFS)")
+        print("8.  Dirty image each line spw (channel)")
+        print("9.  Manually clean each line spw (channel)")
+        print("10. Manually clean single line spw (channel)")
+        print("11. Automatically clean each line spw (channel)")
+        print("12. Generate continuum diagnostic plots")
+        print("13. Generate spectral line diagnostic plots")
         print("q [quit]")
         answer = raw_input("> ")
         if answer == '0':
@@ -955,55 +1219,52 @@ def main(field,vis='',config_file=''):
         elif answer == '6':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
-            mask = '{0}.cont.mfs.clean.mask'.format(field)
             mfs_clean_cont_spw(field=field,vis=vis,spw=spw,
-                               mask=mask,clean_params=clean_params)
+                               clean_params=clean_params)
         elif answer == '7':
-            print("Enter continuum clean threshold (i.e. 1.1mJy)")
+            print("Which spw did you clean manually?")
+            manual_spw = raw_input('> ')
+            print("Enter clean threshold (i.e. 1.1mJy)")
             cont_threshold = raw_input('> ')
+            auto_mfs_clean_cont_spws(field=field,vis=vis,
+                                     my_cont_spws=my_cont_spws,
+                                     manual_spw=manual_spw,
+                                     threshold=cont_threshold,
+                                     clean_params=clean_params)
         elif answer == '8':
-            if cont_threshold is None:
-                logger.warn("Must set continuum clean threshold first!")
-            else:
-                mask = '{0}.cont.mfs.clean.mask'.format(field)
-                auto_mfs_clean_cont_spws(field=field,vis=vis,
-                                         my_cont_spws=my_cont_spws,
-                                         threshold=cont_threshold,
-                                         mask=mask,
-                                         clean_params=clean_params)
-        elif answer == '9':
             channel_dirty_line_spws(field=field,vis=vis,
                                     my_line_spws=my_line_spws,
                                     clean_params=clean_params,
                                     config=config)
-        elif answer == '10':
+        elif answer == '9':
             channel_clean_line_spws(field=field,vis=vis,
                                     my_line_spws=my_line_spws,
                                     clean_params=clean_params,
                                     config=config)
-        elif answer == '11':
+        elif answer == '10':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
-            mask = '{0}.cont.mfs.clean.mask'.format(field)
             channel_clean_line_spw(field=field,vis=vis,spw=spw,
                                    my_line_spws=my_line_spws,
-                                   mask=mask,clean_params=clean_params,
+                                   clean_params=clean_params,
                                    config=config)
-        elif answer == '12':
-            print("Enter line clean threshold (i.e. 1.1mJy)")
+        elif answer == '11':
+            print("Which spw did you clean manually?")
+            manual_spw = raw_input('> ')
+            print("Enter clean threshold (i.e. 1.1mJy)")
             line_threshold = raw_input('> ')
+            auto_channel_clean_line_spws(field=field,vis=vis,
+                                         my_line_spws=my_line_spws,
+                                         manual_spw=manual_spw,
+                                         threshold=line_threshold,
+                                         clean_params=clean_params,
+                                         config=config)
+        elif answer == '12':
+            contplot(field,my_cont_spws=my_cont_spws,
+                     clean_params=clean_params)
         elif answer == '13':
-            if line_threshold is None:
-                logger.warn("Must set line clean threshold first!")
-            else:
-                mask = '{0}.cont.mfs.clean.mask'.format(field)
-                auto_channel_clean_line_spws(field=field,vis=vis,
-                                my_line_spws=my_line_spws,
-                                threshold=line_threshold,mask=mask,
-                                clean_params=clean_params,
-                                config=config)
-        elif answer == '14':
-            contplot(field,my_cont_spws=my_cont_spws)
+            lineplot(field,my_line_spws=my_line_spws,
+                     clean_params=clean_params)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break
         else:

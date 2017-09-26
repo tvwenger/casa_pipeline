@@ -64,6 +64,7 @@ class ClickPlot:
         self.ax.set_title(title)
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
+        self.ax.set_xlim(np.min(xdata),np.max(xdata))
         self.clickbutton = []
         self.clickx_data = []
         self.clicky_data = []
@@ -90,6 +91,22 @@ class ClickPlot:
         regions = zip(self.clickx_data[::2],self.clickx_data[1::2])
         return regions
 
+    def plot_contfit(self,xdata,ydata,contfit,
+                     xlabel=None,ylabel=None,title=None):
+        """
+        Plot data and continuum fit
+        """
+        self.ax.clear()
+        self.ax.plot(xdata,contfit(xdata),'r-')
+        self.ax.plot(xdata,ydata,'k-')
+        self.ax.set_title(title)
+        self.ax.set_xlabel(xlabel)
+        self.ax.set_ylabel(ylabel)
+        self.ax.set_xlim(np.min(xdata),np.max(xdata))
+        self.fig.show()
+        print("Click anywhere to continue")
+        self.fig.waitforbuttonpress()
+
     def get_gaussian_estimates(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
         """
         Using click events to get the gaussian fit estimates
@@ -99,32 +116,38 @@ class ClickPlot:
         self.ax.set_title(title)
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
+        self.ax.set_xlim(np.min(xdata),np.max(xdata))
         self.clickbutton = []
         self.clickx_data = []
         self.clicky_data = []
+        print "Right click to skip fitting this line, or:"
         print "Left click to select start of line region"
-        print "Left click to select center of line"
-        print "Left click to select width of line"
-        print "Left click again to select end of line region."
         cid = self.fig.canvas.mpl_connect('button_press_event',
                                           self.onclick)
         self.fig.show()
         self.fig.waitforbuttonpress()
+        if 3 in self.clickbutton:
+            return None,None,None,None
         self.ax.axvline(self.clickx_data[-1])
         line_start = self.clickx_data[-1]
+        print "Left click to select center of line"
         self.fig.waitforbuttonpress()
         self.ax.axvline(self.clickx_data[-1])
         center_guess = self.clickx_data[-1]
+        print "Left click to select width of line"
         self.fig.waitforbuttonpress()
         self.ax.axvline(self.clickx_data[-1])
         sigma_guess = self.clickx_data[-1]-center_guess
+        print "Left click to select end of line region."
         self.fig.waitforbuttonpress()
         self.ax.axvline(self.clickx_data[-1])
         line_end = self.clickx_data[-1]
         self.fig.canvas.mpl_disconnect(cid)
         return line_start,center_guess,sigma_guess,line_end
 
-    def plot_fit(self,xdata,ydata,amp,center,sigma,xlabel=None,ylabel=None,title=None):
+    def plot_fit(self,xdata,ydata,amp,center,sigma,
+                 xlabel=None,ylabel=None,title=None,
+                 outfile=None):
         """
         Plot data and fit and residuals
         """
@@ -137,11 +160,13 @@ class ClickPlot:
         self.ax.set_title(title)
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
+        self.ax.set_xlim(np.min(xdata),np.max(xdata))
+        self.fig.savefig(outfile)
         self.fig.show()
         print("Click anywhere to continue")
         self.fig.waitforbuttonpress()
 
-def calc_te(imagename,region,freq=None):
+def calc_te(imagename,region,fluxtype,freq=None):
     """
     Extract spectrum from region, measure RRL shape and continuum
     brightness, calculate electron temperature
@@ -149,6 +174,7 @@ def calc_te(imagename,region,freq=None):
     Inputs:
       imagename = image to analyze
       region = region file
+      fluxtype = what type of flux to measure ('flux density' or 'mean')
       freq = if None, get frequency from image header
 
     Returns:
@@ -156,12 +182,12 @@ def calc_te(imagename,region,freq=None):
       e_te = error on electron temperature (K)
       line_to_cont = line to continuum ratio
       e_line_to_cont = error
-      line_brightness = line strength (Jy)
+      line_brightness = line strength (mJy)
       e_line_brightness = error
       line_fwhm = line width (km/s)
       e_line_fwhm = error
-      cont_brightness = continuum brightness (Jy)
-      rms = error
+      cont_brightness = continuum brightness (mJy)
+      rms = error (mJy)
       freq = frequency
     """
     #
@@ -172,18 +198,24 @@ def calc_te(imagename,region,freq=None):
     # Open image, extract spectrum from region
     #
     logfile = '{0}.specflux'.format(imagename)
-    casa.specflux(imagename=imagename,region=region,logfile=logfile)
+    casa.specflux(imagename=imagename,region=region,function=fluxtype,
+                  logfile=logfile,overwrite=True)
+    if fluxtype == 'flux density':
+        ylabel = 'Flux (mJy)'
+    else:
+        ylabel = 'Flux Density (mJy/beam)'
     #
     # Import spectrum and plot it
     #
     specdata = np.genfromtxt(logfile,comments='#',dtype=None,
                              names=('channel','npts','freq','velocity','flux'))
+    specdata['flux'] = specdata['flux']*1000. # Jy -> mJy
     myplot = ClickPlot(1)
     #
     # Get line-free regions
     #
     regions = myplot.get_line_free_regions(specdata['velocity'],specdata['flux'],
-                                           xlabel='Velocity (km/s)',ylabel='Flux (Jy)',title=imagename)
+                                           xlabel='Velocity (km/s)',ylabel=ylabel,title=imagename)
     #
     # Extract line free velocity and flux
     #
@@ -193,68 +225,90 @@ def calc_te(imagename,region,freq=None):
     line_free_velocity = specdata['velocity'][line_free_mask]
     line_free_flux = specdata['flux'][line_free_mask]
     #
-    # Fit and remove continuum (degree = 0, constant value)
+    # Fit continuum as 3rd order polyonimal, plot fit
     #
-    pfit = np.polyfit(line_free_velocity,line_free_flux,0)
-    cont_brightness = pfit[0]
-    #
-    # Compute RMS
-    #
-    rms = np.sqrt(np.mean((line_free_flux-cont_brightness)**2.))
+    pfit = np.polyfit(line_free_velocity,line_free_flux,3)
+    contfit = np.poly1d(pfit)
+    myplot.plot_contfit(specdata['velocity'],specdata['flux'],contfit,
+                        xlabel='Velocity (km/s)',ylabel=ylabel,
+                        title=imagename)
     #
     # Subtract continuum
     #
-    flux_contsub = specdata['flux'] - cont_brightness
+    flux_contsub = specdata['flux'] - contfit(specdata['velocity'])
+    line_free_flux_contsub = line_free_flux - contfit(line_free_velocity)
+    #
+    # Calculate average continuum
+    #
+    cont_brightness = np.mean(line_free_flux)
+    #
+    # Compute RMS
+    #
+    rms = np.sqrt(np.mean(line_free_flux_contsub**2.))
     #
     # Re-plot spectrum, get Gaussian fit estimates
     #
     line_start,center_guess,sigma_guess,line_end = \
      myplot.get_gaussian_estimates(specdata['velocity'],flux_contsub,
-                                                         xlabel='Velocity (km/s)',ylabel='Flux (Jy)',title=imagename)
-    center_idx = np.argmin(np.abs(specdata['velocity']-center_guess))
-    amp_guess = flux_contsub[center_idx]
-    #
-    # Extract line velocity and fluxes
-    #
-    line_mask = (specdata['velocity']>line_start)&(specdata['velocity']<line_end)
-    line_flux = flux_contsub[line_mask]
-    line_velocity = specdata['velocity'][line_mask]
-    #
-    # Fit gaussian to data
-    #
-    popt,pcov = curve_fit(gaussian,line_velocity,line_flux,
-                                       p0=(amp_guess,center_guess,sigma_guess),
-                                       sigma=np.ones(line_flux.size)*rms)
-    line_brightness = popt[0]
-    e_line_brightness = np.sqrt(pcov[0][0])
-    line_center = popt[1]
-    e_line_center = np.sqrt(pcov[1][1])
-    line_sigma = popt[2]
-    e_line_sigma = np.sqrt(pcov[2][2])
-    line_fwhm = 2.*np.sqrt(2.*np.log(2.))*line_sigma
-    e_line_fwhm = 2.*np.sqrt(2.*np.log(2.))*e_line_sigma
+                                   xlabel='Velocity (km/s)',ylabel=ylabel,title=imagename)
+    if None in [line_start,center_guess,sigma_guess,line_end]:
+        line_brightness = np.nan
+        e_line_brightness = np.nan
+        line_center = np.nan
+        e_line_center = np.nan
+        line_sigma = np.nan
+        e_line_sigma = np.nan
+        line_fwhm = np.nan
+        e_line_fwhm = np.nan
+    else:
+        center_idx = np.argmin(np.abs(specdata['velocity']-center_guess))
+        amp_guess = flux_contsub[center_idx]
+        #
+        # Extract line velocity and fluxes
+        #
+        line_mask = (specdata['velocity']>line_start)&(specdata['velocity']<line_end)
+        line_flux = flux_contsub[line_mask]
+        line_velocity = specdata['velocity'][line_mask]
+        #
+        # Fit gaussian to data
+        #
+        popt,pcov = curve_fit(gaussian,line_velocity,line_flux,
+                              p0=(amp_guess,center_guess,sigma_guess),
+                              sigma=np.ones(line_flux.size)*rms)
+        line_brightness = popt[0]
+        e_line_brightness = np.sqrt(pcov[0][0])
+        line_center = popt[1]
+        e_line_center = np.sqrt(pcov[1][1])
+        line_sigma = popt[2]
+        e_line_sigma = np.sqrt(pcov[2][2])
+        line_fwhm = 2.*np.sqrt(2.*np.log(2.))*line_sigma
+        e_line_fwhm = 2.*np.sqrt(2.*np.log(2.))*e_line_sigma
     #
     # Plot fit
     #
+    outfile='{0}.spec.png'.format(imagename)
     myplot.plot_fit(specdata['velocity'],flux_contsub,line_brightness,line_center,line_sigma,
-                             xlabel='Velocity (km/s)',ylabel='Flux (Jy)',title=imagename)
+                    xlabel='Velocity (km/s)',ylabel=ylabel,title=imagename,
+                    outfile=outfile)
     #
     # Calculate electron temperature
     #
     if freq is None:
-        freq = np.mean(specdata['freq'])/1000.
+        freq = np.mean(specdata['freq'])
     line_to_cont = line_brightness/cont_brightness
     e_line_to_cont = line_to_cont * np.sqrt(rms**2./cont_brightness**2. + e_line_brightness**2./line_brightness**2.)
     y = 0.08 # Balser 2011 default value
-    te = (7103.3*freq**1.1/line_to_cont/line_fwhm/(1.+y))**0.87
+    te = (7103.3*(freq/1000.)**1.1/line_to_cont/line_fwhm/(1.+y))**0.87
     e_te = 0.87*te*np.sqrt(e_line_fwhm**2./line_fwhm**2. + rms**2./cont_brightness**2. + e_line_brightness**2./line_brightness**2.)
     #
     # Return results
     #
     return (te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
-               cont_brightness, rms, freq)
+            line_center, e_line_center, cont_brightness, rms, freq)
 
-def main(field,lineids=[],linetype='dirty',outfile='electron_temps.txt'):
+def main(field,stackedimage,region,fluxtype='flux density',
+         lineids=[],linetype='dirty',
+         outfile='electron_temps.txt',config_file=None):
     """
    Extract spectrum from region in each RRL image, measure continuum
    brightess and fit Gaussian to measure RRL properties. Also fit stacked 
@@ -262,9 +316,13 @@ def main(field,lineids=[],linetype='dirty',outfile='electron_temps.txt'):
 
     Inputs:
       field       = field to analyze
+      stackedimage = the stacked image filename
+      region = filename of region where to extract spectrum
+      fluxtype = what type of flux to measure ('flux density' or 'mean')
       lineids     = lines to stack, if empty all lines
       linetype = 'clean' or 'dirty'
       outfile = where the results go
+      config_file = configuration file
 
     Returns:
       Nothing
@@ -274,14 +332,52 @@ def main(field,lineids=[],linetype='dirty',outfile='electron_temps.txt'):
     #
     logger = logging.getLogger("main")
     #
+    # Check inputs
+    #
+    if not os.path.exists(config_file):
+        logger.critical('Configuration file not found')
+        raise ValueError('Configuration file not found!')
+    #
+    # load configuration file
+    #
+    config = ConfigParser.ConfigParser()
+    logger.info("Reading configuration file {0}".format(config_file))
+    config.read(config_file)
+    logger.info("Done.")
+    #
+    # Check if we supplied lineids
+    #
+    if len(lineids) == 0:
+        lineids = config.get("Clean","lineids").split(',')
+        goodlineids = []
+        for lineid in lineids:
+            if os.path.isdir('{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)):
+                goodlineids.append(lineid)
+        lineids = goodlineids
+    #
     # Set-up file
     #
-    region = '{0}.reg'.format(field)
     with open(outfile,'w') as f:
-        f.write('{0:13} {1:5} {2:5} {3:6} {4:9} {5:11} {6:5} {7:6} {8:9} {9:11} {10:7} {11:7}\n'.\
-                   format('lineid','freq','line','e_line','line_fwhm','e_line_fwhm','cont','rms','line2cont','e_line2cont','te','e_te'))
-        f.write('#{0:12} {1:5} {2:5} {3:6} {4:9} {5:11} {6:5} {7:6} {8:9} {9:11} {10:7} {11:7}\n'.\
-                   format('','GHz','mJy','mJy','km/s','km/s','mJy','mJy','','','K','K'))
+        # 0       1           2      3      4        5        6     7      8        9        10        11          12        13
+        # lineid  frequency   velo   e_velo line     e_line   fwhm  e_fwhm cont     rms      line2cont e_line2cont elec_temp e_elec_temp
+        # #       MHz         km/s   km/s   mJy/beam mJy/beam km/s  km/s   mJy/beam mJy/beam                       K         K
+        # H122a   9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0
+        # stacked 9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0
+        # 1234567 12345678902 123456 123456 12345678 12345678 12345 123456 12345678 12345678 123456789 12345678901 123456789 12345678901
+        #
+        headerfmt = '{0:7} {1:12} {2:6} {3:6} {4:8} {5:8} {6:5} {7:6} {8:8} {9:8} {10:9} {11:11} {12:9} {13:11}\n'
+        rowfmt = '{0:7} {1:12.6f} {2:6.1f} {3:6.1f} {4:8.1f} {5:8.1f} {6:5.1f} {7:6.1f} {8:8.1f} {9:8.1f} {10:9.3f} {11:11.3f} {12:9.1f} {13:11.1f}\n'
+        f.write(headerfmt.format('lineid','frequency','velo','e_velo',
+                                 'line','e_line','fwhm','e_fwhm',
+                                 'cont','rms','line2cont','e_line2cont',
+                                 'elec_temp','e_elec_temp'))
+        if fluxtype == 'fluxdensity':
+            fluxunit = 'mJy'
+        else:
+            fluxunit = 'mJy/beam'
+        f.write(headerfmt.format('#','MHz','km/s','km/s',
+                                 fluxunit,fluxunit,'km/s','km/s',
+                                 fluxunit,fluxunit,'','','K','K'))
         #
         # Compute electron temperature for each individual RRL
         # 
@@ -292,18 +388,24 @@ def main(field,lineids=[],linetype='dirty',outfile='electron_temps.txt'):
             # 
             imagename = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
             te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-                cont_brightness, rms, freq = calc_te(imagename,region)
-            f.write('{0:13} {1:5.3f} {2:5.2f} {3:6.2f} {4:9.2f} {5:11.2f} {6:5.2f} {7:6.2f} {8:9.3f} {9:11.3f} {10:7.1f} {11:7.1f}\n'.\
-                       format(lineid, freq, line_brightness*1000., e_line_brightness*1000., line_fwhm, e_line_fwhm, cont_brightness*1000.,
-                                   rms*1000., line_to_cont, e_line_to_cont, te, e_te))
+                line_center,e_line_center,cont_brightness, rms, freq = calc_te(imagename,region,fluxtype)
+            f.write(rowfmt.format(lineid, freq,
+                                  line_center, e_line_center,
+                                  line_brightness, e_line_brightness,
+                                  line_fwhm, e_line_fwhm,
+                                  cont_brightness, rms,
+                                  line_to_cont, e_line_to_cont,
+                                  te, e_te))
             freqs = np.append(freqs,freq)
         #
         # Compute electron temperature for stacked line image
         #
-        lineid = 'Halpha_{0}lines'.format(len(lineids))
-        imagename = '{0}.{1}.channel.{2}.image'.format(field,lineid,linetype)
         te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-                cont_brightness, rms, freq = calc_te(imagename,region,freq=np.mean(freqs))
-        f.write('{0:13} {1:5.3f} {2:5.2f} {3:6.2f} {4:9.2f} {5:11.2f} {6:5.2f} {7:6.2f} {8:9.3f} {9:11.3f} {10:7.1f} {11:7.1f}\n'.\
-                       format(lineid, freq, line_brightness*1000., e_line_brightness*1000., line_fwhm, e_line_fwhm, cont_brightness*1000.,
-                                   rms*1000., line_to_cont, e_line_to_cont, te, e_te))
+                line_center, e_line_center, cont_brightness, rms, freq = calc_te(stackedimage,region,fluxtype,freq=np.mean(freqs))
+        f.write(rowfmt.format('stacked', freq,
+                              line_center, e_line_center,
+                              line_brightness, e_line_brightness,
+                              line_fwhm, e_line_fwhm,
+                              cont_brightness, rms,
+                              line_to_cont, e_line_to_cont,
+                              te, e_te))

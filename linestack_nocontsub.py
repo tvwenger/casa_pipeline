@@ -118,38 +118,38 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
     # available images
     #
     logger.info("Finding largest synthesized beam")
-    bmaj = []
-    bmin = []
-    bpa = []
+    bmajs = []
+    bmins = []
+    bpas = []
     contimage = '{0}.cont.mfs.clean.pbcor'.format(field)
     if not os.path.isdir(contimage):
         logger.warn("{0} not found!".format(contimage))
     else:
-        bmaj.append(casa.imhead(imagename=contimage,mode='get',
-                                hdkey='beammajor')['value'])
-        bmin.append(casa.imhead(imagename=contimage,mode='get',
-                                hdkey='beamminor')['value'])
-        bpa.append(casa.imhead(imagename=contimage,mode='get',
-                               hdkey='beampa')['value'])
+        bmajs.append(casa.imhead(imagename=contimage,mode='get',
+                                 hdkey='beammajor')['value'])
+        bmins.append(casa.imhead(imagename=contimage,mode='get',
+                                 hdkey='beamminor')['value'])
+        bpas.append(casa.imhead(imagename=contimage,mode='get',
+                                hdkey='beampa')['value'])
     for spw in my_line_spws.split(','):
         lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if not os.path.isdir(lineimage):
             logger.warn("{0} not found!".format(lineimage))
             continue
-        bmaj.append(casa.imhead(imagename=lineimage,mode='get',
+        bmajs.append(casa.imhead(imagename=lineimage,mode='get',
                                 hdkey='beammajor')['value'])
-        bmin.append(casa.imhead(imagename=lineimage,mode='get',
+        bmins.append(casa.imhead(imagename=lineimage,mode='get',
                                 hdkey='beamminor')['value'])
-        bpa.append(casa.imhead(imagename=lineimage,mode='get',
-                               hdkey='beampa')['value'])
+        bpas.append(casa.imhead(imagename=lineimage,mode='get',
+                                hdkey='beampa')['value'])
     #
-    # Smooth available images to maximum beam size + 2*cell_size
-    # and mean position angle
+    # Smooth available images to maximum (circular) beam size
+    # + 0.1 pixel size (otherwise imsmooth will complain)
     #
     cell_size = float(config.get("Clean","cell").replace('arcsec',''))
-    bmaj_target = np.max(bmaj)+2.*cell_size
-    bmin_target = np.max(bmaj)+2.*cell_size
-    bpa_target = np.mean(bpa)
+    bmaj_target = np.max(bmajs)+0.1*cell_size
+    bmin_target = np.max(bmajs)+0.1*cell_size
+    bpa_target = 0.
     logger.info("Smoothing all images to")
     logger.info("Major axis: {0} arcsec".format(bmaj_target))
     logger.info("Minor axis: {0} arcsec".format(bmin_target))
@@ -158,12 +158,15 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
     bmin_target = {'unit':'arcsec','value':bmin_target}
     bpa_target = {'unit':'deg','value':bpa_target}
     contimage = '{0}.cont.mfs.clean.pbcor'.format(field)
+    # Smooth continuum
     if os.path.isdir(contimage):
         outfile='{0}.cont.mfs.imsmooth'.format(field)
         casa.imsmooth(imagename=contimage,kernel='gauss',
                       targetres=True,major=bmaj_target,minor=bmin_target,
                       pa=bpa_target,outfile=outfile,overwrite=overwrite)
-    for spw,lineid in zip(my_line_spws.split(','),config.get('Clean','lineids').split(',')):
+    # Smooth lines, rename with lineid
+    lineids = config.get('Clean','lineids').split(',')
+    for spw,lineid in zip(my_line_spws.split(','),lineids):
         lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(lineimage):
             outfile = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
@@ -172,13 +175,15 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
                           pa=bpa_target,outfile=outfile,overwrite=overwrite)
     logger.info("Done!")
 
-def stack_line(field,lineids=[],config=None,overwrite=False,
+def stack_line(field,stackedimage,
+               lineids=[],config=None,overwrite=False,
                linetype='clean'):
     """
     Stack line images
 
     Inputs:
       field        = field to analyze
+      stackedimage = what to name the stacked image
       lineids      = lines to stack, if empty use all lines
       overwrite    = if True, overwrite steps as necessary
                      if False, skip steps if output already exists
@@ -195,79 +200,20 @@ def stack_line(field,lineids=[],config=None,overwrite=False,
     #
     if len(lineids) == 0:
         lineids = config.get("Clean","lineids").split(',')
+        goodlineids = []
+        for lineid in lineids:
+            if os.path.isdir('{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)):
+                goodlineids.append(lineid)
+        lineids = goodlineids
     logger.info("Stacking lines {0}".format(lineids))
     images = ['{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
     ims = ['IM{0}'.format(foo) for foo in range(len(images))]
     myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
-    outfile='{0}.Halpha_{1}lines.channel.{2}.image'.format(field,str(len(images)),linetype)
-    casa.immath(imagename=images,outfile=outfile,mode='evalexpr',
-                expr=myexp)
-    logger.info("Done!")
-    return outfile
-
-def moment0_image(stackedimage='',overwrite=False):
-    """
-    Stack line images
-
-    Inputs:
-      stackedimage = filename of line-stacked image
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    outfile = stackedimage+'.mom0'
-    if os.path.isdir(outfile):
-        if overwrite:
-            logger.info("Overwriting {0}".format(outfile))
-            shutil.rmtree(outfile)
-        else:
-            logger.info("Found {0}".format(outfile))
-            return outfile
-    logger.info("Creating moment 0 map")
-    casa.immoments(stackedimage,moments=0,outfile=outfile)
-    logger.info("Done!")
-    return outfile
-
-def linetocont_image(field,moment0image='',overwrite=False,
-                     linetype='clean'):
-    """
-    Stack line images
-
-    Inputs:
-      field        = field to analyze
-      moment0image = filename of line-stacked moment 0 image
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    logger.info("Creating line-to-continuum image")
-    if not os.path.isdir(moment0image):
-        logger.warn("{0} does not exist".format(moment0image))
-        return
-    contimage='{0}.cont.mfs.imsmooth'.format(field)
-    if not os.path.isdir(contimage):
-        logger.warn("{0} does not exist".format(contimage))
-        return
-    outfile='{0}.linetocont.{1}.image'.format(field,linetype)
-    images = [moment0image,contimage]
-    myexp = 'IM0/IM1'
-    casa.immath(imagename=images,outfile=outfile,mode='evalexpr',
+    casa.immath(imagename=images,outfile=stackedimage,mode='evalexpr',
                 expr=myexp)
     logger.info("Done!")
 
-def main(field,lineids=[],config_file='',overwrite=False,
+def main(field,stackedimage,lineids=[],config_file='',overwrite=False,
          linetype='clean'):
     """
     Continuum subtract, smooth line images to common beam, 
@@ -276,6 +222,7 @@ def main(field,lineids=[],config_file='',overwrite=False,
 
     Inputs:
       field       = field to analyze
+      stackedimage = what to name the stacked image
       lineids     = lines to stack, if empty all lines
       config_file = filename of the configuration file for this project
       overwrite   = if True, overwrite steps as necessary
@@ -320,14 +267,5 @@ def main(field,lineids=[],config_file='',overwrite=False,
     #
     # Stack line images
     #
-    stackedimage = stack_line(field,lineids=lineids,config=config,
-                              overwrite=overwrite,linetype=linetype)
-    #
-    # make moment 0 image
-    #
-    moment0image = moment0_image(stackedimage,overwrite=overwrite)
-    #
-    # create line-to-continuum image using stacked line image
-    #
-    linetocont_image(field,moment0image=moment0image,overwrite=overwrite,
-                     linetype=linetype)
+    stack_line(field,stackedimage,lineids=lineids,config=config,
+               overwrite=overwrite,linetype=linetype)
