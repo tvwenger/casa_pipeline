@@ -31,7 +31,7 @@ class ClickPlot:
     Generic class for generating and interacting with matplotlib figures
     """
     def __init__(self,num):
-        self.fig = plt.figure(num)
+        self.fig = plt.figure(num,figsize=(8,6))
         plt.clf()
         print "Created figure",self.fig.number
         self.ax = self.fig.add_subplot(111)
@@ -61,10 +61,14 @@ class ClickPlot:
         """
         self.ax.clear()
         self.ax.plot(xdata,ydata,'k-')
-        self.ax.set_title(title)
+        self.ax.set_title(title.replace('_','\_'))
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
         self.ax.set_xlim(np.min(xdata),np.max(xdata))
+        yrange = np.max(ydata)-np.min(ydata)
+        ymin = np.min(ydata)-0.10*yrange
+        ymax = np.max(ydata)+0.10*yrange
+        self.ax.set_ylim(ymin,ymax)
         self.clickbutton = []
         self.clickx_data = []
         self.clicky_data = []
@@ -74,6 +78,7 @@ class ClickPlot:
         print "Right click when done."
         cid = self.fig.canvas.mpl_connect('button_press_event',
                                           self.onclick)
+        self.fig.tight_layout()
         self.fig.show()
         while True:
             self.fig.waitforbuttonpress()
@@ -99,10 +104,15 @@ class ClickPlot:
         self.ax.clear()
         self.ax.plot(xdata,contfit(xdata),'r-')
         self.ax.plot(xdata,ydata,'k-')
-        self.ax.set_title(title)
+        self.ax.set_title(title.replace('_','\_'))
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
         self.ax.set_xlim(np.min(xdata),np.max(xdata))
+        yrange = np.max(ydata)-np.min(ydata)
+        ymin = np.min(ydata)-0.10*yrange
+        ymax = np.max(ydata)+0.10*yrange
+        self.ax.set_ylim(ymin,ymax)
+        self.fig.tight_layout()
         self.fig.show()
         print("Click anywhere to continue")
         self.fig.waitforbuttonpress()
@@ -113,10 +123,17 @@ class ClickPlot:
         """
         self.ax.clear()
         self.ax.plot(xdata,ydata,'k-')
-        self.ax.set_title(title)
+        self.ax.set_title(title.replace('_','\_'))
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
-        self.ax.set_xlim(np.min(xdata),np.max(xdata))
+        xmin = -250
+        xmax = 150
+        self.ax.set_xlim(xmin,xmax)
+        ydata_cut = ydata[np.argmin(np.abs(xdata-xmin)):np.argmin(np.abs(xdata-xmax))]
+        yrange = np.max(ydata_cut)-np.min(ydata_cut)
+        ymin = np.min(ydata_cut)-0.10*yrange
+        ymax = np.max(ydata_cut)+0.10*yrange
+        self.ax.set_ylim(ymin,ymax)
         self.clickbutton = []
         self.clickx_data = []
         self.clicky_data = []
@@ -124,6 +141,7 @@ class ClickPlot:
         print "Left click to select start of line region"
         cid = self.fig.canvas.mpl_connect('button_press_event',
                                           self.onclick)
+        self.fig.tight_layout()
         self.fig.show()
         self.fig.waitforbuttonpress()
         if 3 in self.clickbutton:
@@ -157,10 +175,18 @@ class ClickPlot:
         self.ax.plot(xdata,residuals,'m-')
         self.ax.plot(xdata,yfit,'r-')
         self.ax.plot(xdata,ydata,'k-')
-        self.ax.set_title(title)
+        self.ax.set_title(title.replace('_','\_'))
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
-        self.ax.set_xlim(np.min(xdata),np.max(xdata))
+        xmin = -250
+        xmax = 150
+        self.ax.set_xlim(xmin,xmax)
+        ydata_cut = ydata[np.argmin(np.abs(xdata-xmin)):np.argmin(np.abs(xdata-xmax))]
+        yrange = np.max(ydata_cut)-np.min(ydata_cut)
+        ymin = np.min(ydata_cut)-0.10*yrange
+        ymax = np.max(ydata_cut)+0.10*yrange
+        self.ax.set_ylim(ymin,ymax)
+        self.fig.tight_layout()
         self.fig.savefig(outfile)
         self.fig.show()
         print("Click anywhere to continue")
@@ -175,7 +201,7 @@ def calc_te(imagename,region,fluxtype,freq=None):
       imagename = image to analyze
       region = region file
       fluxtype = what type of flux to measure ('flux density' or 'mean')
-      freq = if None, get frequency from image header
+      freq = if None, get frequency from image header (MHz)
 
     Returns:
       te = electron temperature (K)
@@ -212,30 +238,49 @@ def calc_te(imagename,region,fluxtype,freq=None):
     specdata['flux'] = specdata['flux']*1000. # Jy -> mJy
     myplot = ClickPlot(1)
     #
+    # Remove NaNs (if any)
+    #
+    is_nan = np.isnan(specdata['flux'])
+    specdata_flux = specdata['flux'][~is_nan]
+    specdata_velocity = specdata['velocity'][~is_nan]
+    #
     # Get line-free regions
     #
-    regions = myplot.get_line_free_regions(specdata['velocity'],specdata['flux'],
+    regions = myplot.get_line_free_regions(specdata_velocity,specdata_flux,
                                            xlabel='Velocity (km/s)',ylabel=ylabel,title=imagename)
     #
     # Extract line free velocity and flux
     #
-    line_free_mask = np.zeros(specdata['velocity'].size,dtype=bool)
+    line_free_mask = np.zeros(specdata_velocity.size,dtype=bool)
     for region in regions:
-        line_free_mask[(specdata['velocity']>region[0])&(specdata['velocity']<region[1])] = True
-    line_free_velocity = specdata['velocity'][line_free_mask]
-    line_free_flux = specdata['flux'][line_free_mask]
+        line_free_mask[(specdata_velocity>region[0])&(specdata_velocity<region[1])] = True
+    line_free_velocity = specdata_velocity[line_free_mask]
+    line_free_flux = specdata_flux[line_free_mask]
     #
-    # Fit continuum as 3rd order polyonimal, plot fit
+    # Fit baseline as polyonimal, iterate to find best fit, plot fit
     #
-    pfit = np.polyfit(line_free_velocity,line_free_flux,3)
-    contfit = np.poly1d(pfit)
-    myplot.plot_contfit(specdata['velocity'],specdata['flux'],contfit,
+    rsss = []
+    npolys = []
+    contfits = []
+    for npoly in range(0,11):
+        pfit = np.polyfit(line_free_velocity,line_free_flux,npoly)
+        contfit = np.poly1d(pfit)
+        rss = np.sum((line_free_flux-contfit(line_free_velocity))**2.)
+        rss = rss/(len(line_free_velocity)-npoly-1)
+        rsss.append(rss)
+        npolys.append(npoly)
+        contfits.append(contfit)
+    ind = np.argmin(rsss)
+    npoly = npolys[ind]
+    contfit = contfits[ind]
+    logger.info("Best baseline fit has polynomial order {0}".format(npoly))
+    myplot.plot_contfit(specdata_velocity,specdata_flux,contfit,
                         xlabel='Velocity (km/s)',ylabel=ylabel,
                         title=imagename)
     #
     # Subtract continuum
     #
-    flux_contsub = specdata['flux'] - contfit(specdata['velocity'])
+    flux_contsub = specdata_flux - contfit(specdata_velocity)
     line_free_flux_contsub = line_free_flux - contfit(line_free_velocity)
     #
     # Calculate average continuum
@@ -249,7 +294,7 @@ def calc_te(imagename,region,fluxtype,freq=None):
     # Re-plot spectrum, get Gaussian fit estimates
     #
     line_start,center_guess,sigma_guess,line_end = \
-     myplot.get_gaussian_estimates(specdata['velocity'],flux_contsub,
+     myplot.get_gaussian_estimates(specdata_velocity,flux_contsub,
                                    xlabel='Velocity (km/s)',ylabel=ylabel,title=imagename)
     if None in [line_start,center_guess,sigma_guess,line_end]:
         line_brightness = np.nan
@@ -261,14 +306,14 @@ def calc_te(imagename,region,fluxtype,freq=None):
         line_fwhm = np.nan
         e_line_fwhm = np.nan
     else:
-        center_idx = np.argmin(np.abs(specdata['velocity']-center_guess))
+        center_idx = np.argmin(np.abs(specdata_velocity-center_guess))
         amp_guess = flux_contsub[center_idx]
         #
         # Extract line velocity and fluxes
         #
-        line_mask = (specdata['velocity']>line_start)&(specdata['velocity']<line_end)
+        line_mask = (specdata_velocity>line_start)&(specdata_velocity<line_end)
         line_flux = flux_contsub[line_mask]
-        line_velocity = specdata['velocity'][line_mask]
+        line_velocity = specdata_velocity[line_mask]
         #
         # Fit gaussian to data
         #
@@ -286,8 +331,8 @@ def calc_te(imagename,region,fluxtype,freq=None):
     #
     # Plot fit
     #
-    outfile='{0}.spec.png'.format(imagename)
-    myplot.plot_fit(specdata['velocity'],flux_contsub,line_brightness,line_center,line_sigma,
+    outfile='{0}.spec.pdf'.format(imagename)
+    myplot.plot_fit(specdata_velocity,flux_contsub,line_brightness,line_center,line_sigma,
                     xlabel='Velocity (km/s)',ylabel=ylabel,title=imagename,
                     outfile=outfile)
     #
@@ -304,9 +349,11 @@ def calc_te(imagename,region,fluxtype,freq=None):
     # Return results
     #
     return (te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
-            line_center, e_line_center, cont_brightness, rms, freq)
+            line_center, e_line_center, cont_brightness, rms, freq, npoly)
 
-def main(field,stackedimage,region,fluxtype='flux density',
+def main(field,region,
+         stackedimages=[],stackedlabels=[],stackedfreqs=[],
+         fluxtype='flux density',
          lineids=[],linetype='dirty',
          outfile='electron_temps.txt',config_file=None):
     """
@@ -316,8 +363,9 @@ def main(field,stackedimage,region,fluxtype='flux density',
 
     Inputs:
       field       = field to analyze
-      stackedimage = the stacked image filename
       region = filename of region where to extract spectrum
+      stackedimagelabels = what to call the stacked image data in outfile
+      stackedimages = filenames of stacked images
       fluxtype = what type of flux to measure ('flux density' or 'mean')
       lineids     = lines to stack, if empty all lines
       linetype = 'clean' or 'dirty'
@@ -358,54 +406,81 @@ def main(field,stackedimage,region,fluxtype='flux density',
     # Set-up file
     #
     with open(outfile,'w') as f:
-        # 0       1           2      3      4        5        6     7      8        9        10        11          12        13
-        # lineid  frequency   velo   e_velo line     e_line   fwhm  e_fwhm cont     rms      line2cont e_line2cont elec_temp e_elec_temp
-        # #       MHz         km/s   km/s   mJy/beam mJy/beam km/s  km/s   mJy/beam mJy/beam                       K         K
-        # H122a   9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0
-        # stacked 9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0
-        # 1234567 12345678902 123456 123456 12345678 12345678 12345 123456 12345678 12345678 123456789 12345678901 123456789 12345678901
+        # 0       1           2      3      4        5        6     7      8        9        10        11          12        13          14
+        # lineid  frequency   velo   e_velo line     e_line   fwhm  e_fwhm cont     rms      line2cont e_line2cont elec_temp e_elec_temp npoly
+        # #       MHz         km/s   km/s   mJy/beam mJy/beam km/s  km/s   mJy/beam mJy/beam                       K         K           
+        # H122a   9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0      50
+        # stacked 9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0      50
+        # 1234567 12345678902 123456 123456 12345678 12345678 12345 123456 12345678 12345678 123456789 12345678901 123456789 12345678901 50
         #
-        headerfmt = '{0:7} {1:12} {2:6} {3:6} {4:8} {5:8} {6:5} {7:6} {8:8} {9:8} {10:9} {11:11} {12:9} {13:11}\n'
-        rowfmt = '{0:7} {1:12.6f} {2:6.1f} {3:6.1f} {4:8.1f} {5:8.1f} {6:5.1f} {7:6.1f} {8:8.1f} {9:8.1f} {10:9.3f} {11:11.3f} {12:9.1f} {13:11.1f}\n'
+        headerfmt = '{0:12} {1:12} {2:6} {3:6} {4:8} {5:8} {6:5} {7:6} {8:8} {9:8} {10:9} {11:11} {12:9} {13:11} {14:5}\n'
+        rowfmt = '{0:12} {1:12.6f} {2:6.1f} {3:6.1f} {4:8.1f} {5:8.1f} {6:5.1f} {7:6.1f} {8:8.1f} {9:8.1f} {10:9.3f} {11:11.3f} {12:9.1f} {13:11.1f} {14:2}\n'
         f.write(headerfmt.format('lineid','frequency','velo','e_velo',
                                  'line','e_line','fwhm','e_fwhm',
                                  'cont','rms','line2cont','e_line2cont',
-                                 'elec_temp','e_elec_temp'))
+                                 'elec_temp','e_elec_temp','npoly'))
         if fluxtype == 'fluxdensity':
             fluxunit = 'mJy'
         else:
             fluxunit = 'mJy/beam'
         f.write(headerfmt.format('#','MHz','km/s','km/s',
                                  fluxunit,fluxunit,'km/s','km/s',
-                                 fluxunit,fluxunit,'','','K','K'))
+                                 fluxunit,fluxunit,'','','K','K',''))
         #
         # Compute electron temperature for each individual RRL
         # 
-        freqs = np.array([])
         for lineid in lineids:
             #
             # Generate file names
             # 
             imagename = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
             te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-                line_center,e_line_center,cont_brightness, rms, freq = calc_te(imagename,region,fluxtype)
+                line_center,e_line_center,cont_brightness, rms, freq, npoly = calc_te(imagename,region,fluxtype)
             f.write(rowfmt.format(lineid, freq,
                                   line_center, e_line_center,
                                   line_brightness, e_line_brightness,
                                   line_fwhm, e_line_fwhm,
                                   cont_brightness, rms,
                                   line_to_cont, e_line_to_cont,
-                                  te, e_te))
-            freqs = np.append(freqs,freq)
+                                  te, e_te, npoly))
         #
-        # Compute electron temperature for stacked line image
+        # Compute electron temperature for stacked line images
         #
-        te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-                line_center, e_line_center, cont_brightness, rms, freq = calc_te(stackedimage,region,fluxtype,freq=np.mean(freqs))
-        f.write(rowfmt.format('stacked', freq,
+        for image,label,freq in zip(stackedimages,stackedlabels,stackedfreqs):
+            te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
+                line_center, e_line_center, cont_brightness, rms, freq, npoly = calc_te(image,region,fluxtype,freq=freq)
+            f.write(rowfmt.format(label, freq,
                               line_center, e_line_center,
                               line_brightness, e_line_brightness,
                               line_fwhm, e_line_fwhm,
                               cont_brightness, rms,
                               line_to_cont, e_line_to_cont,
-                              te, e_te))
+                              te, e_te, npoly))
+    #
+    # Generate TeX file of all plots
+    #
+    logger.info("Generating PDF...")
+    plots = ['{0}.{1}.channel.{2}.imsmooth.spec.pdf'.format(field,lineid,linetype) for lineid in lineids]
+    plots = plots + ['{0}.spec.pdf'.format(image) for image in stackedimages]
+    # fix filenames so LaTeX doesn't complain
+    plots = ['{'+fn.replace('.pdf','')+'}.pdf' for fn in plots]
+    with open('{0}.spectra.tex'.format(field),'w') as f:
+        f.write(r"\documentclass{article}"+"\n")
+        f.write(r"\usepackage{graphicx}"+"\n")
+        f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
+        f.write(r"\begin{document}"+"\n")
+        for i in range(0,len(plots),6):
+            f.write(r"\begin{figure}"+"\n")
+            f.write(r"\centering"+"\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+plots[i]+"}\n")
+            if len(plots) > i+3: f.write(r"\includegraphics[width=0.45\textwidth]{"+plots[i+3]+"}\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+plots[i+1]+"}\n")
+            if len(plots) > i+4: f.write(r"\includegraphics[width=0.45\textwidth]{"+plots[i+4]+"}\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+plots[i+2]+"}\n")
+            if len(plots) > i+5: f.write(r"\includegraphics[width=0.45\textwidth]{"+plots[i+5]+"}\n")
+            f.write(r"\end{figure}"+"\n")
+            f.write(r"\clearpage"+"\n")
+        f.write(r"\end{document}")
+    os.system('pdflatex -interaction=batchmode {0}.spectra.tex'.format(field))
+    logger.info("Done.")
+        

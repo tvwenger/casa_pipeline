@@ -16,6 +16,12 @@ import logging.config
 import ConfigParser
 import gc
 
+# for making plotcal plots
+from taskinit import cptool,tptool
+plotcal_cp=cptool()
+plotcal_tp=tptool()
+plotcal_tp.setgui(False)
+
 __VERSION__ = "1.0"
 
 # load logging configuration file
@@ -188,6 +194,10 @@ def setup(vis='',config=None):
     if not os.path.isdir('scitarg_figures'):
         logger.info("Creating scitarg_figures directory...")
         os.makedirs('scitarg_figures')
+        logger.info("Done.")
+    if not os.path.isdir('plotcal_figures'):
+        logger.info("Creating plotcal_figures directory...")
+        os.makedirs('plotcal_figures')
         logger.info("Done.")
     return (my_cont_spws,my_line_spws,flux_cals,primary_cals,
             secondary_cals,science_targets,refant)
@@ -527,7 +537,7 @@ def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[],
     logger.info("Generating PDF...")
     num_plots = plotnum
     iplot = 0
-    with open('calibrator_plots.tex','w') as f:
+    with open('calibrator_figures.tex','w') as f:
         f.write(r"\documentclass{article}"+"\n")
         f.write(r"\usepackage{graphicx}"+"\n")
         f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
@@ -551,7 +561,7 @@ def gen_calibrator_plots(vis='',primary_cals=[],secondary_cals=[],
                 iplot+=1
         f.write(r"\end{figure}"+"\n")
         f.write(r"\end{document}"+"\n")
-    os.system('pdflatex -interaction=batchmode calibrator_plots.tex')
+    os.system('pdflatex -interaction=batchmode calibrator_figures.tex')
     logger.info("Done.")
     #
     # Save plot list to a pickle object
@@ -721,7 +731,7 @@ def manual_flag_calibrators(vis='',primary_cals=[],secondary_cals=[],
     #
     # Display menu option to user
     #
-    logger.info("Please inspect calibrator_plots.pdf then perform manual calibrations.")
+    logger.info("Please inspect calibrator_plots.pdf then perform manual flagging.")
     while True:
         print("f - flag some data")
         print("plot id number - generate interactive version of plot with this id")
@@ -795,6 +805,7 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     if config is None:
         logger.critical("Error: Need to supply a config")
         raise ValueError("Config is None")
+    plotcal_figures = []
     #
     # set the model for the flux calibrators
     #
@@ -833,11 +844,11 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     #
     field = ','.join(primary_cals)
     logger.info("Calculating delay calibration table for primary calibrators...")
-    if os.path.isdir('delays.cal'):
-        casa.rmtables('delays.cal')
-    casa.gaincal(vis=vis,caltable='delays.cal',field=field,
+    if os.path.isdir('delays.Kcal'):
+        casa.rmtables('delays.Kcal')
+    casa.gaincal(vis=vis,caltable='delays.Kcal',field=field,
                  refant=refant,gaintype='K',minblperant=1)
-    if not os.path.isdir('delays.cal'):
+    if not os.path.isdir('delays.Kcal'):
         logger.critical('Problem with delay calibration')
         raise ValueError('Problem with delay calibration!')
     logger.info("Done.")
@@ -846,32 +857,56 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     # (phase vs time)
     #
     logger.info("Calculating phase calibration table on integration timescales for primary calibrators...")
-    if os.path.isdir('phase_int.cal'):
-        casa.rmtables('phase_int.cal')
-    casa.gaincal(vis=vis,caltable="phase_int.cal",field=field,
+    if os.path.isdir('phase_int.Gcal0'):
+        casa.rmtables('phase_int.Gcal0')
+    casa.gaincal(vis=vis,caltable="phase_int.Gcal0",field=field,
                  solint="int",calmode="p",refant=refant,
                  gaintype="G",minsnr=2.0,minblperant=1,
-                 gaintable=['delays.cal'])
-    if not os.path.isdir('phase_int.cal'):
+                 gaintable=['delays.Kcal'])
+    if not os.path.isdir('phase_int.Gcal0'):
         logger.critical('Problem with integration-timescale phase calibration')
         raise ValueError('Problem with integration-timescale phase calibration!')
     logger.info("Done.")
+    #
+    # Generate phase_int.Gcal0 plots
+    #
+    plotcal_cp.open('phase_int.Gcal0')
+    for spw in my_cont_spws.split(',')+my_line_spws.split(','):
+        try:
+            plotcal_cp.selectcal(spw=spw)
+        except RuntimeError:
+            logger.warn("spw {0} not found!".format(spw))
+            continue
+        plotcal_cp.plotoptions(subplot=111,overplot=False,
+                               iteration='antenna',plotrange=[0,0,-180,180],
+                               showflags=False)
+        plotcal_cp.plot('time','phase')
+        plotcal_ind = 0
+        fname = 'plotcal_figures/phase_int0_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+        plotcal_cp.savefig(fname)
+        if os.path.exists(fname): plotcal_figures.append(fname)
+        plotcal_ind = plotcal_ind + 1
+        while plotcal_cp.next():
+            fname = 'plotcal_figures/phase_int0_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+            plotcal_cp.savefig(fname)
+            if os.path.exists(fname): plotcal_figures.append(fname)
+            plotcal_ind = plotcal_ind + 1
     #
     # bandpass calibration for continuum spws. Combine all scans,
     # average some channels as defined in configuration file
     #
     logger.info("Calculating bandpass calibration table for primary calibrators...")
-    if os.path.isdir('bandpass.cal'):
-        casa.rmtables('bandpass.cal')
+    if os.path.isdir('bandpass.Bcal'):
+        casa.rmtables('bandpass.Bcal')
     chan_avg = config.get('Calibration','Continuum Channels')
     if chan_avg == '':
         solint='inf'
     else:
         solint='inf,{0}chan'.format(chan_avg)
-    casa.bandpass(vis=vis,caltable='bandpass.cal',field=field,
+    casa.bandpass(vis=vis,caltable='bandpass.Bcal',field=field,
                   spw=my_cont_spws,refant=refant,solint=solint,
                   combine='scan',solnorm=True,minblperant=1,
-                  gaintable=['delays.cal','phase_int.cal'])
+                  gaintable=['delays.Kcal','phase_int.Gcal0'])
     #
     # bandpass calibration for line spws. Combine all scans,
     # average some channels as defined in configuration file,
@@ -882,67 +917,183 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
         solint='inf'
     else:
         solint='inf,{0}chan'.format(chan_avg)
-    casa.bandpass(vis=vis,caltable='bandpass.cal',field=field,
+    casa.bandpass(vis=vis,caltable='bandpass.Bcal',field=field,
                   spw=my_line_spws,refant=refant,solint=solint,
                   combine='scan',solnorm=True,minblperant=1,append=True,
-                  gaintable=['delays.cal','phase_int.cal'])
-    if not os.path.isdir('bandpass.cal'):
+                  gaintable=['delays.Kcal','phase_int.Gcal0'])
+    if not os.path.isdir('bandpass.Bcal'):
         logger.critical('Problem with bandpass calibration')
         raise ValueError('Problem with bandpass calibration!')
     logger.info("Done.")
+    #
+    # Generate bandpass.Bcal plots
+    #
+    plotcal_cp.open('bandpass.Bcal')
+    for spw in my_cont_spws.split(',')+my_line_spws.split(','):
+        try:
+            plotcal_cp.selectcal(spw=spw)
+        except RuntimeError:
+            logger.warn("spw {0} not found!".format(spw))
+            continue
+        plotcal_cp.plotoptions(subplot=111,overplot=False,
+                               iteration='antenna',plotrange=[0,0,0,0],
+                               showflags=False)
+        plotcal_cp.plot('chan','amp')
+        plotcal_ind = 0
+        fname = 'plotcal_figures/bandpass_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+        plotcal_cp.savefig(fname)
+        if os.path.exists(fname): plotcal_figures.append(fname)
+        plotcal_ind = plotcal_ind + 1
+        while plotcal_cp.next():
+            fname = 'plotcal_figures/bandpass_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+            plotcal_cp.savefig(fname)
+            if os.path.exists(fname): plotcal_figures.append(fname)
+            plotcal_ind = plotcal_ind + 1
     #
     # integration timescale phase corrections for all calibrators
     # required for accurate amplitude calibration
     #
     field = ','.join(primary_cals+secondary_cals)
     logger.info("Re-calculating the phase calibration table on integration timescales for all calibrators...")
-    if os.path.isdir('phase_int.cal'):
-        casa.rmtables('phase_int.cal')
-    casa.gaincal(vis=vis,caltable="phase_int.cal",field=field,
+    if os.path.isdir('phase_int.Gcal1'):
+        casa.rmtables('phase_int.Gcal1')
+    casa.gaincal(vis=vis,caltable="phase_int.Gcal1",field=field,
                 solint="int",calmode="p",refant=refant,
                 gaintype="G",minsnr=2.0,minblperant=1,
-                gaintable=['delays.cal','bandpass.cal'])
-    if not os.path.isdir('phase_int.cal'):
+                gaintable=['delays.Kcal','bandpass.Bcal'])
+    if not os.path.isdir('phase_int.Gcal1'):
         logger.critical('Problem with integration-timescale phase calibration')
         raise ValueError('Problem with integration-timescale phase calibration!')
     logger.info("Done.")
+    #
+    # Generate phase_int.Gcal1 plots
+    #
+    plotcal_cp.open('phase_int.Gcal1')
+    for spw in my_cont_spws.split(',')+my_line_spws.split(','):
+        try:
+            plotcal_cp.selectcal(spw=spw)
+        except RuntimeError:
+            logger.warn("spw {0} not found!".format(spw))
+            continue
+        plotcal_cp.plotoptions(subplot=111,overplot=False,
+                               iteration='antenna',plotrange=[0,0,-180,180],
+                               showflags=False)
+        plotcal_cp.plot('time','phase')
+        plotcal_ind = 0
+        fname = 'plotcal_figures/phase_int1_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+        plotcal_cp.savefig(fname)
+        if os.path.exists(fname): plotcal_figures.append(fname)
+        plotcal_ind = plotcal_ind + 1
+        while plotcal_cp.next():
+            fname = 'plotcal_figures/phase_int1_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+            plotcal_cp.savefig(fname)
+            if os.path.exists(fname): plotcal_figures.append(fname)
+            plotcal_ind = plotcal_ind + 1
     #
     # scan timescale phase corrections for all calibrators
     # required to apply to science targets
     #
     logger.info("Calculating the phase calibration table on scan timescales for all calibrators...")
-    if os.path.isdir('phase_scan.cal'):
-        casa.rmtables('phase_scan.cal')
-    casa.gaincal(vis=vis,caltable="phase_scan.cal",field=field,
+    if os.path.isdir('phase_scan.Gcal'):
+        casa.rmtables('phase_scan.Gcal')
+    casa.gaincal(vis=vis,caltable="phase_scan.Gcal",field=field,
                  solint="inf",calmode="p",refant=refant,
                  gaintype="G",minsnr=2.0,minblperant=1,
-                 gaintable=['delays.cal','bandpass.cal'])
-    if not os.path.isdir('phase_scan.cal'):
+                 gaintable=['delays.Kcal','bandpass.Bcal'])
+    if not os.path.isdir('phase_scan.Gcal'):
         logger.critical('Problem with scan-timescale phase calibration')
         raise ValueError('Problem with scan-timescale phase calibration!')
     logger.info("Done.")
+    #
+    # Generate phase_scan.Gcal plots
+    #
+    plotcal_cp.open('phase_scan.Gcal')
+    for spw in my_cont_spws.split(',')+my_line_spws.split(','):
+        try:
+            plotcal_cp.selectcal(spw=spw)
+        except RuntimeError:
+            logger.warn("spw {0} not found!".format(spw))
+            continue
+        plotcal_cp.plotoptions(subplot=111,overplot=False,
+                               iteration='antenna',plotrange=[0,0,-180,180],
+                               showflags=False)
+        plotcal_cp.plot('time','phase')
+        plotcal_ind = 0
+        fname = 'plotcal_figures/phase_scan_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+        plotcal_cp.savefig(fname)
+        if os.path.exists(fname): plotcal_figures.append(fname)
+        plotcal_ind = plotcal_ind + 1
+        while plotcal_cp.next():
+            fname = 'plotcal_figures/phase_scan_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+            plotcal_cp.savefig(fname)
+            if os.path.exists(fname): plotcal_figures.append(fname)
+            plotcal_ind = plotcal_ind + 1
     #
     # scan timescale amplitude corrections using
     # integration timescale phase calibration
     #
     logger.info("Calculating the amplitude calibration table on scan timescales for all calibrators...")
-    if os.path.isdir('apcal.cal'):
-        casa.rmtables('apcal.cal')
-    casa.gaincal(vis=vis,caltable="apcal.cal",field=field,
+    if os.path.isdir('apcal_scan.Gcal'):
+        casa.rmtables('apcal_scan.Gcal')
+    casa.gaincal(vis=vis,caltable="apcal_scan.Gcal",field=field,
                  solint="inf",calmode="ap",refant=refant,
                  minsnr=2.0,minblperant=1,
-                 gaintable=['delays.cal','bandpass.cal','phase_int.cal'])
-    if not os.path.isdir('apcal.cal'):
+                 gaintable=['delays.Kcal','bandpass.Bcal','phase_int.Gcal1'])
+    if not os.path.isdir('apcal_scan.Gcal'):
         logger.critical('Problem with amplitude calibration')
         raise ValueError('Problem with amplitude calibration!')
     logger.info("Done.")
+    #
+    # Generate phase_scan.Gcal plots
+    #
+    plotcal_cp.open('apcal_scan.Gcal')
+    for spw in my_cont_spws.split(',')+my_line_spws.split(','):
+        try:
+            plotcal_cp.selectcal(spw=spw)
+        except RuntimeError:
+            logger.warn("spw {0} not found!".format(spw))
+            continue
+        plotcal_cp.plotoptions(subplot=111,overplot=False,
+                               iteration='antenna',plotrange=[0,0,-180,180],
+                               showflags=False)
+        plotcal_cp.plot('time','phase')
+        plotcal_ind = 0
+        fname = 'plotcal_figures/apcal_phase_scan_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+        plotcal_cp.savefig(fname)
+        if os.path.exists(fname): plotcal_figures.append(fname)
+        plotcal_ind = plotcal_ind + 1
+        while plotcal_cp.next():
+            fname = 'plotcal_figures/apcal_phase_scan_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+            plotcal_cp.savefig(fname)
+            if os.path.exists(fname): plotcal_figures.append(fname)
+            plotcal_ind = plotcal_ind + 1
+    for spw in my_cont_spws.split(',')+my_line_spws.split(','):
+        try:
+            plotcal_cp.selectcal(spw=spw)
+        except RuntimeError:
+            logger.warn("spw {0} not found!".format(spw))
+            continue
+        plotcal_cp.plotoptions(subplot=111,overplot=False,
+                               iteration='antenna',plotrange=[0,0,0,0],
+                               showflags=False)
+        plotcal_cp.plot('time','amp')
+        plotcal_ind = 0
+        fname = 'plotcal_figures/apcal_amp_scan_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+        plotcal_cp.savefig(fname)
+        if os.path.exists(fname): plotcal_figures.append(fname)
+        plotcal_ind = plotcal_ind + 1
+        while plotcal_cp.next():
+            fname = 'plotcal_figures/apcal_amp_scan_spw{0}_ant{1}.png'.format(spw,plotcal_ind)
+            plotcal_cp.savefig(fname)
+            if os.path.exists(fname): plotcal_figures.append(fname)
+            plotcal_ind = plotcal_ind + 1
     #
     # set the flux scale
     #
     logger.info("Calculating the flux calibration table...")
     if os.path.isdir('flux.cal'):
         casa.rmtables('flux.cal')
-    casa.fluxscale(vis=vis,caltable="apcal.cal",fluxtable="flux.cal",
+    casa.fluxscale(vis=vis,caltable="apcal_scan.Gcal",fluxtable="flux.cal",
                    reference=','.join(flux_cals),incremental=True)
     if not os.path.isdir('flux.cal'):
         logger.critical('Problem with flux calibration')
@@ -954,8 +1105,8 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     logger.info("Applying calibration tables to all calibrators...")
     for field in primary_cals+secondary_cals:
         casa.applycal(vis=vis,field=field,calwt=False,
-                      gaintable=['delays.cal','bandpass.cal',
-                                 'phase_int.cal','apcal.cal',
+                      gaintable=['delays.Kcal','bandpass.Bcal',
+                                 'phase_int.Gcal1','apcal_scan.Gcal',
                                  'flux.cal'],
                       gainfield=['','',field,field,field],
                       flagbackup=False)
@@ -965,6 +1116,35 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     #
     casa.flagmanager(vis=vis,mode='save',
                      versionname='calibrate_{0}'.format(time.strftime('%Y%m%d%H%M%S',time.gmtime())))
+    #
+    # Generate PDF of plotcal figures
+    #
+    logger.info("Generating tex document...")
+    iplot = 0
+    with open('plotcal_figures.tex','w') as f:
+        f.write(r"\documentclass{article}"+"\n")
+        f.write(r"\usepackage{graphicx,subfig}"+"\n")
+        f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
+        f.write(r"\begin{document}"+"\n")
+        f.write(r"\begin{figure}"+"\n")
+        f.write(r"\centering"+"\n")
+        for fname in plotcal_figures:
+            if iplot > 0 and iplot % 6 == 0:
+                f.write(r"\end{figure}"+"\n")
+                f.write(r"\clearpage"+"\n")
+                f.write(r"\begin{figure}"+"\n")
+                f.write(r"\centering"+"\n")
+            elif iplot > 0 and iplot % 2 == 0:
+                f.write(r"\end{figure}"+"\n")
+                f.write(r"\begin{figure}"+"\n")
+                f.write(r"\centering"+"\n")
+            f.write(r"\subfloat[\texttt{"+fname.replace("_",r"\_")+"}]{")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+fname+"}}"+"\n")
+            iplot+=1
+        f.write(r"\end{figure}"+"\n")
+        f.write(r"\end{document}"+"\n")
+    os.system('pdflatex -interaction=batchmode plotcal_figures.tex')
+    logger.info("Done.")
 
 def calibrate_sciencetargets(vis='',science_targets=[]):
     """
@@ -988,8 +1168,8 @@ def calibrate_sciencetargets(vis='',science_targets=[]):
         #
         logger.info("Applying calibration solutions to {0}".format(field))
         casa.applycal(vis=vis,field=field,calwt=False,
-                      gaintable=['delays.cal','bandpass.cal',
-                                 'phase_int.cal','apcal.cal',
+                      gaintable=['delays.Kcal','bandpass.Bcal',
+                                 'phase_scan.Gcal','apcal_scan.Gcal',
                                  'flux.cal'],
                       gainfield=['','','nearest','nearest','nearest'],
                       flagbackup=False)
@@ -1106,7 +1286,7 @@ def gen_sciencetarget_plots(vis='',science_targets=[],config=None):
     logger.info("Generating tex document...")
     num_plots = plotnum
     iplot = 0
-    with open('scitarg_plots.tex','w') as f:
+    with open('scitarg_figures.tex','w') as f:
         f.write(r"\documentclass{article}"+"\n")
         f.write(r"\usepackage{graphicx}"+"\n")
         f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
@@ -1130,7 +1310,7 @@ def gen_sciencetarget_plots(vis='',science_targets=[],config=None):
                 iplot+=1
         f.write(r"\end{figure}"+"\n")
         f.write(r"\end{document}"+"\n")
-    os.system('pdflatex -interaction=batchmode scitarg_plots.tex')
+    os.system('pdflatex -interaction=batchmode scitarg_figures.tex')
     logger.info("Done.")
     #
     # Save the plot list to the pickle object
@@ -1173,7 +1353,7 @@ def manual_flag_sciencetargets(vis='',science_targets=[],config=None):
     #
     # Prompt user with menu
     #
-    logger.info("Please inspect scitarg_plots.pdf then perform manual calibrations.")
+    logger.info("Please inspect scitarg_plots.pdf then perform manual flagging.")
     while True:
         print("f - flag some data")
         print("plot id number - generate interactive version of plot with this id")

@@ -1,0 +1,54 @@
+TVW September 2017
+This all began because the CASA task imview doesn't work right.
+For some dumb reason, each time you run this task to generate an
+image, the image gets a few pixels longer in the y-direction. So
+after a few hundred iterations, the images are ridiculously long.
+A new strategy...
+
+I decided to output the images in fits files, then use astropy and
+matplotlib to generate images, but within CASA. Unfortunately, CASA
+does not come bundled with astropy, and the version of matplotlib is
+so out of date that we couldn't use astropy WCS projection.
+
+I tested using:
+import pip
+pip.main(['install','astropy','--user'])
+
+which worked fine. This installs astropy locally (~/.local/lib/)
+and, since this is the only astropy in the CASA PYTHONPATH, it works
+fine.
+
+I was not so lucky with matplotlib. I tried to use the same method to
+update matplotlib to the latest version:
+
+import pip
+pip.main(['install','matplotlib','--user','--upgrade'])
+
+which worked as it should. The CASA PYTHONPATH, however, puts the
+CASA directories FIRST, so the CASA version of the outdated matplotlib
+is the one that is used. I experimented with changing the PYTHONPATH
+system variable in my .bashrc file, but when you start NRAO CASA it
+PREPENDS the CASA directories instead of APPENDING them. I eventually
+found a hack that worked, but it was such a pain in the ass that I
+decided to try a different method.
+
+I downloaded CASA version 5.0.0-218 to my home directory, installed
+it, then installed and updated astropy and matplotlib, respectively.
+Since I was running my own local copy of CASA, I didn't need to
+specify the '--user' argument to pip - I'm allowed to install/update
+these packages right in the CASA library.
+
+import pip
+pip.main(['install','pip','--upgrade'])
+pip.main(['install','astropy','--upgrade'])
+pip.main(['install','matplotlib','--upgrade'])
+
+After about 6 hours of putting around with astropy+matplotlib, I give
+up. The things I tried to do that wouldn't work:
+1. put beam on TOP of everything else (i.e. grid)
+2. add colorbar to WCS axes
+Both of these things failed with no apparent solution after hours
+of Googling.
+
+Alright, I got the colorbar working. Solution to beam problem
+was to remove grid. Works for now.

@@ -13,6 +13,9 @@ import logging.config
 import ConfigParser
 import shutil
 import matplotlib.pyplot as plt
+from astropy.io import fits
+from astropy.wcs import WCS
+from matplotlib.patches import Ellipse
 
 __VERSION__ = "1.0"
 
@@ -143,7 +146,8 @@ def regrid_velocity(vis='',spws='',config=None,clean_params={}):
         #                 veltype=clean_params['veltype'],interpolation='fftshift')
         logger.info("Done.")
 
-def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
+def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={},
+                   uvtaper=False):
     """
     Dirty image continuum spws using multi-frequency synthesis
 
@@ -152,6 +156,7 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -164,6 +169,8 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     # Dirty image continuum
     #
     imagename='{0}.cont.mfs.dirty'.format(field)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     logger.info("Generating dirty continuum image (MFS)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=0,interactive=False,nterms=clean_params['nterms'],
@@ -171,7 +178,7 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -188,10 +195,26 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Exporting fits file...")
     casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                     fitsimage='{0}.pbcor.fits'.format(imagename),
-                    overwrite=True)
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.tt0'.format(imagename),
+                    fitsimage='{0}.image.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.residual.tt0'.format(imagename),
+                    fitsimage='{0}.residual.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.alpha'.format(imagename),
+                    fitsimage='{0}.alpha.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.alpha.error'.format(imagename),
+                    fitsimage='{0}.alpha.error.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.beta'.format(imagename),
+                    fitsimage='{0}.beta.fits'.format(imagename),
+                    overwrite=True,history=False)
     logger.info("Done.")
 
-def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
+def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={},
+                       uvtaper=False):
     """
     Dirty image continuum spws channel-by-channel
 
@@ -200,6 +223,7 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -212,6 +236,8 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     # Dirty image continuum
     #
     imagename='{0}.cont.channel.dirty'.format(field)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     logger.info("Generating dirty continuum cube (channel)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=0,interactive=False,
@@ -219,7 +245,7 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -236,10 +262,17 @@ def channel_dirty_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Exporting fits file...")
     casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                     fitsimage='{0}.pbcor.fits'.format(imagename),
-                    overwrite=True)
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image'.format(imagename),
+                    fitsimage='{0}.image.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.residual'.format(imagename),
+                    fitsimage='{0}.residual.fits'.format(imagename),
+                    overwrite=True,history=False)    
     logger.info("Done.")
 
-def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
+def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={},
+                   uvtaper=False):
     """
     Clean continuum spws using multi-frequency synthesis
 
@@ -248,6 +281,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -260,6 +294,8 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     # Clean continuum
     #
     imagename='{0}.cont.mfs.clean'.format(field)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     logger.info("Cleaning continuum image (MFS)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,nterms=clean_params['nterms'],
@@ -267,7 +303,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -284,10 +320,27 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Exporting fits file...")
     casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                     fitsimage='{0}.pbcor.fits'.format(imagename),
-                    overwrite=True)
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.tt0'.format(imagename),
+                    fitsimage='{0}.image.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.residual.tt0'.format(imagename),
+                    fitsimage='{0}.residual.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.alpha'.format(imagename),
+                    fitsimage='{0}.alpha.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.alpha.error'.format(imagename),
+                    fitsimage='{0}.alpha.error.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.beta'.format(imagename),
+                    fitsimage='{0}.beta.fits'.format(imagename),
+                    overwrite=True,history=False)
+
     logger.info("Done.")
 
-def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
+def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={},
+                       uvtaper=False):
     """
     Clean continuum channels
 
@@ -296,6 +349,7 @@ def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -308,6 +362,8 @@ def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     # Clean continuum
     #
     imagename='{0}.cont.channel.clean'.format(field)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     logger.info("Cleaning continuum cube (channel)...")
     casa.clean(vis=vis,imagename=imagename,field=field,spw=my_cont_spws,
                threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,
@@ -315,7 +371,7 @@ def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -332,11 +388,17 @@ def channel_clean_cont(field='',vis='',my_cont_spws='',clean_params={}):
     logger.info("Exporting fits file...")
     casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                     fitsimage='{0}.pbcor.fits'.format(imagename),
-                    overwrite=True)
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image'.format(imagename),
+                    fitsimage='{0}.image.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.residual'.format(imagename),
+                    fitsimage='{0}.residual.fits'.format(imagename),
+                    overwrite=True,history=False)
     logger.info("Done.")
 
 def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
-                        clean_params={}):
+                        clean_params={},uvtaper=False):
     """
     Dirty image each continuum spw (MFS)
 
@@ -345,6 +407,7 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -358,6 +421,8 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
         # Dirty image
         #
         imagename='{0}.spw{1}.mfs.dirty'.format(field,spw)
+        if uvtaper:
+            imagename = imagename + '.uvtaper'
         logger.info("Generating dirty image of spw {0} (MFS)...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                    threshold='0mJy',niter=0,interactive=False,nterms=clean_params['nterms'],
@@ -365,7 +430,7 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         logger.info("Done.")
         #
         # Primary beam correction
@@ -382,11 +447,26 @@ def mfs_dirty_cont_spws(field='',vis='',my_cont_spws='',
         logger.info("Exporting fits file...")
         casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                         fitsimage='{0}.pbcor.fits'.format(imagename),
-                        overwrite=True)
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.tt0'.format(imagename),
+                        fitsimage='{0}.image.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.residual.tt0'.format(imagename),
+                        fitsimage='{0}.residual.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.alpha'.format(imagename),
+                        fitsimage='{0}.alpha.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.alpha.error'.format(imagename),
+                        fitsimage='{0}.alpha.error.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.beta'.format(imagename),
+                        fitsimage='{0}.beta.fits'.format(imagename),
+                        overwrite=True,history=False)
         logger.info("Done.")
 
 def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
-                        clean_params={}):
+                        clean_params={},uvtaper=False):
     """
     Clean each continuum spw (MFS)
 
@@ -395,6 +475,7 @@ def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
       vis          = measurement set
       my_cont_spws = comma-separated string of continuum spws
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -408,6 +489,8 @@ def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         # Clean
         #
         imagename='{0}.spw{1}.mfs.clean'.format(field,spw)
+        if uvtaper:
+            imagename = imagename + '.uvtaper'
         logger.info("Cleaning continuum spw {0} (MFS)...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                    threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,nterms=clean_params['nterms'],
@@ -415,7 +498,7 @@ def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         logger.info("Done.")
         #
         # Primary beam correction
@@ -432,11 +515,26 @@ def mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         logger.info("Exporting fits file...")
         casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                         fitsimage='{0}.pbcor.fits'.format(imagename),
-                        overwrite=True)
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.tt0'.format(imagename),
+                        fitsimage='{0}.image.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.residual.tt0'.format(imagename),
+                        fitsimage='{0}.residual.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.alpha'.format(imagename),
+                        fitsimage='{0}.alpha.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.alpha.error'.format(imagename),
+                        fitsimage='{0}.alpha.error.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.beta'.format(imagename),
+                        fitsimage='{0}.beta.fits'.format(imagename),
+                        overwrite=True,history=False)
         logger.info("Done.")
 
 def mfs_clean_cont_spw(field='',vis='',spw='',
-                        clean_params={}):
+                        clean_params={},uvtaper=False):
     """
     Clean single continuum spw (MFS)
 
@@ -445,6 +543,7 @@ def mfs_clean_cont_spw(field='',vis='',spw='',
       vis          = measurement set
       spw          = spectral window to clean
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -457,6 +556,8 @@ def mfs_clean_cont_spw(field='',vis='',spw='',
     # Clean
     #
     imagename='{0}.spw{1}.mfs.clean'.format(field,spw)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     logger.info("Cleaning continuum spw {0} (MFS)...".format(spw))
     casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                threshold='0mJy',niter=_MAX_ITER,interactive=True,npercycle=_NPERCYCLE,nterms=clean_params['nterms'],
@@ -464,7 +565,7 @@ def mfs_clean_cont_spw(field='',vis='',spw='',
                gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                imsize=clean_params['imsize'],cell=clean_params['cell'],
                weighting=clean_params['weighting'],robust=clean_params['robust'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -481,12 +582,27 @@ def mfs_clean_cont_spw(field='',vis='',spw='',
     logger.info("Exporting fits file...")
     casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                     fitsimage='{0}.pbcor.fits'.format(imagename),
-                    overwrite=True)
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.tt0'.format(imagename),
+                    fitsimage='{0}.image.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.residual.tt0'.format(imagename),
+                    fitsimage='{0}.residual.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.alpha'.format(imagename),
+                    fitsimage='{0}.alpha.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.alpha.error'.format(imagename),
+                    fitsimage='{0}.alpha.error.fits'.format(imagename),
+                    overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image.beta'.format(imagename),
+                    fitsimage='{0}.beta.fits'.format(imagename),
+                    overwrite=True,history=False)
     logger.info("Done.")
 
 def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
                              manual_spw='',threshold='',
-                             clean_params={}):
+                             clean_params={},uvtaper=False):
     """
     Clean each continuum spw (MFS) using mask and threshold determined
     from manually cleaning another continuum spw. Delete that
@@ -499,6 +615,7 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
       manual_spw   = spectral window that was cleaned manually
       threshold    = clean threshold
       clean_params = dictionary of clean parameters
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -510,11 +627,16 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
     #
     # Use mask from manually cleaned spw
     #
-    mask = '{0}.spw{1}.mfs.clean.mask'.format(field,manual_spw)
+    mask = '{0}.spw{1}.mfs.clean'.format(field,manual_spw)
+    if uvtaper:
+        mask = mask + '.uvtaper'
+    mask = mask + '.mask'
     #
     # Delete image of manually cleaned spw
     #
     imagename = '{0}.spw{1}.mfs.clean'.format(field,manual_spw)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     shutil.rmtree('{0}.image'.format(imagename))
     shutil.rmtree('{0}.pbcor'.format(imagename))
     shutil.rmtree('{0}.residual'.format(imagename))
@@ -529,6 +651,8 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         # Clean
         #
         imagename='{0}.spw{1}.mfs.clean'.format(field,spw)
+        if uvtaper:
+            imagename = imagename + '.uvtaper'
         logger.info("Automatically cleaning continuum spw {0} (MFS)...".format(spw))
         casa.clean(vis=vis,imagename=imagename,field=field,spw=spw,
                    threshold=threshold,niter=_MAX_ITER,interactive=False,nterms=clean_params['nterms'],
@@ -536,7 +660,7 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
                    gain=clean_params['gain'],cyclefactor=clean_params['cyclefactor'],
                    imsize=clean_params['imsize'],cell=clean_params['cell'],
                    weighting=clean_params['weighting'],robust=clean_params['robust'],
-                   uvtaper=True,outertaper=clean_params['outertaper'],
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'],
                    mask=mask)
         logger.info("Done.")
         #
@@ -554,20 +678,37 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
         logger.info("Exporting fits file...")
         casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                         fitsimage='{0}.pbcor.fits'.format(imagename),
-                        overwrite=True)
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.tt0'.format(imagename),
+                        fitsimage='{0}.image.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.residual.tt0'.format(imagename),
+                        fitsimage='{0}.residual.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.alpha'.format(imagename),
+                        fitsimage='{0}.alpha.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.alpha.error'.format(imagename),
+                        fitsimage='{0}.alpha.error.fits'.format(imagename),
+                        overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image.beta'.format(imagename),
+                        fitsimage='{0}.beta.fits'.format(imagename),
+                        overwrite=True,history=False)
         logger.info("Done.")
 
 def channel_dirty_line_spws(field='',vis='',my_line_spws='',
-                            clean_params={},config=None):
+                            clean_params={},config=None,
+                            uvtaper=False):
     """
     Dirty image all line spws
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
-      my_line_spws = comma-separated string of line spws
+      my_line_spws = comma-separated string of line spws to image
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -586,12 +727,14 @@ def channel_dirty_line_spws(field='',vis='',my_line_spws='',
         #
         # Get restfreq
         #
-        spw_ind = my_line_spws.split(',').index(spw)
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         #
         # dirty image spw
         #
         imagename='{0}.spw{1}.channel.dirty'.format(field,spw)
+        if uvtaper:
+            imagename = imagename + '.uvtaper'
         logger.info("Dirty imaging spw {0} (restfreq: {1})...".format(spw,restfreq))
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
@@ -603,7 +746,7 @@ def channel_dirty_line_spws(field='',vis='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         logger.info("Done.")
         #
         # Primary beam correction
@@ -620,20 +763,28 @@ def channel_dirty_line_spws(field='',vis='',my_line_spws='',
         logger.info("Exporting fits file...")
         casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                         fitsimage='{0}.pbcor.fits'.format(imagename),
-                        velocity=True,overwrite=True)
+                        velocity=True,overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image'.format(imagename),
+                        fitsimage='{0}.image.fits'.format(imagename),
+                        velocity=True,overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.residual'.format(imagename),
+                        fitsimage='{0}.residual.fits'.format(imagename),
+                        velocity=True,overwrite=True,history=False)
         logger.info("Done.")
 
 def channel_clean_line_spws(field='',vis='',my_line_spws='',
-                            clean_params={},config=None):
+                            clean_params={},config=None,
+                            uvtaper=False):
     """
     Clean all line spws manually
 
     Inputs:
       field        = field to be imaged
       vis          = measurement set
-      my_line_spws = comma-separated string of all line spws
+      my_line_spws = comma-separated string of line spws to image
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -652,12 +803,14 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
         #
         # Get restfreq
         #
-        spw_ind = my_line_spws.split(',').index(spw)
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         #
         # clean spw
         #
         imagename='{0}.spw{1}.channel.clean'.format(field,spw)
+        if uvtaper:
+            imagename = imagename + '.uvtaper'
         logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         #
@@ -673,7 +826,7 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         #
         # Now actually clean it
         #
@@ -686,7 +839,7 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         logger.info("Done.")
         #
         # Primary beam correction
@@ -703,12 +856,19 @@ def channel_clean_line_spws(field='',vis='',my_line_spws='',
         logger.info("Exporting fits file...")
         casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                         fitsimage='{0}.pbcor.fits'.format(imagename),
-                        velocity=True,overwrite=True)
+                        velocity=True,overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image'.format(imagename),
+                        fitsimage='{0}.image.fits'.format(imagename),
+                        velocity=True,overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.residual'.format(imagename),
+                        fitsimage='{0}.residual.fits'.format(imagename),
+                        velocity=True,overwrite=True,history=False)
         logger.info("Done.")
 
 
-def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
-                           clean_params={},config=None):
+def channel_clean_line_spw(field='',vis='',spw='',
+                           clean_params={},config=None,
+                           uvtaper=False):
     """
     Clean single line spws manually
 
@@ -716,9 +876,9 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
       field        = field to be imaged
       vis          = measurement set
       spw          = spw to clean
-      my_line_spws = comma-separated string of all line spws
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -736,12 +896,14 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
     #
     # Get restfreq
     #
-    spw_ind = my_line_spws.split(',').index(spw)
+    spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
     restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
     #
     # clean spw
     #
     imagename='{0}.spw{1}.channel.clean'.format(field,spw)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     logger.info("Cleaning spw {0} (restfreq: {1})...".format(spw,restfreq))
     regrid_vis = vis+'.spw{0}.cvel'.format(spw)
     #
@@ -757,7 +919,7 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
                restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                nchan=clean_params['nchan'],
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     #
     # Now actually clean it
     #
@@ -770,7 +932,7 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
                restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                nchan=clean_params['nchan'],
                outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-               uvtaper=True,outertaper=clean_params['outertaper'])
+               uvtaper=uvtaper,outertaper=clean_params['outertaper'])
     logger.info("Done.")
     #
     # Primary beam correction
@@ -787,13 +949,20 @@ def channel_clean_line_spw(field='',vis='',spw='',my_line_spws='',
     logger.info("Exporting fits file...")
     casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                     fitsimage='{0}.pbcor.fits'.format(imagename),
-                    velocity=True,overwrite=True)
+                    velocity=True,overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.image'.format(imagename),
+                    fitsimage='{0}.image.fits'.format(imagename),
+                    velocity=True,overwrite=True,history=False)
+    casa.exportfits(imagename='{0}.residual'.format(imagename),
+                    fitsimage='{0}.residual.fits'.format(imagename),
+                    velocity=True,overwrite=True,history=False)
     logger.info("Done.")
 
 
 def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
                                  manual_spw='',threshold='',
-                                 clean_params={},config=None):
+                                 clean_params={},config=None,
+                                 uvtaper=False):
     """
     Clean all line spws non-interactively using clean mask and threshold
     determined by manually cleaning a single line spectral window.
@@ -803,11 +972,12 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
     Inputs:
       field        = field to be imaged
       vis          = measurement set
-      my_line_spws = comma-separated string of line spws
+      my_line_spws = comma-separated string of line spws to image
       manual_spw   = spw that was cleaned manually
       threshold    = clean threshold
       clean_params = dictionary of clean parameters
       config       = ConfigParser object for this project
+      uvtaper      = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -825,11 +995,16 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
     #
     # Use mask from manually cleaned spw
     #
-    mask = '{0}.spw{1}.channel.clean.mask'.format(field,manual_spw)
+    mask = '{0}.spw{1}.channel.clean'.format(field,manual_spw)
+    if uvtaper:
+        mask = mask + '.uvtaper'
+    mask = mask + '.mask'
     #
     # Delete image of manually cleaned spw
     #
     imagename = '{0}.spw{1}.channel.clean'.format(field,manual_spw)
+    if uvtaper:
+        imagename = imagename + '.uvtaper'
     shutil.rmtree('{0}.image'.format(imagename))
     shutil.rmtree('{0}.pbcor'.format(imagename))
     shutil.rmtree('{0}.residual'.format(imagename))
@@ -843,12 +1018,14 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
         #
         # Get restfreq
         #
-        spw_ind = my_line_spws.split(',').index(spw)
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
         restfreq = config.get("Clean","restfreqs").split(',')[spw_ind]
         #
         # Dirty image so we can copy mask
         #
         imagename='{0}.spw{1}.channel.clean'.format(field,spw)
+        if uvtaper:
+            imagename = imagename + '.uvtaper'
         regrid_vis = vis+'.spw{0}.cvel'.format(spw)
         casa.clean(vis=regrid_vis,imagename=imagename,field=field,spw='0',
                    threshold=threshold,niter=0,interactive=False,
@@ -859,7 +1036,7 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         #
         # Copy mask
         #
@@ -883,7 +1060,7 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
                    restfreq=restfreq,start=clean_params['velstart'],width=clean_params['chanwidth'],
                    nchan=clean_params['nchan'],
                    outframe=clean_params['outframe'],veltype=clean_params['veltype'],
-                   uvtaper=True,outertaper=clean_params['outertaper'])
+                   uvtaper=uvtaper,outertaper=clean_params['outertaper'])
         logger.info("Done.")
         #
         # Primary beam correction
@@ -900,13 +1077,20 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
         logger.info("Exporting fits file...")
         casa.exportfits(imagename='{0}.pbcor'.format(imagename),
                         fitsimage='{0}.pbcor.fits'.format(imagename),
-                        velocity=True,overwrite=True)
+                        velocity=True,overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.image'.format(imagename),
+                        fitsimage='{0}.image.fits'.format(imagename),
+                        velocity=True,overwrite=True,history=False)
+        casa.exportfits(imagename='{0}.residual'.format(imagename),
+                        fitsimage='{0}.residual.fits'.format(imagename),
+                        velocity=True,overwrite=True,history=False)
         logger.info("Done.")
 
 
-def contplot(field,my_cont_spws='',clean_params={}):
+def contplot(field,clean_params={}):
     """
-    Generate pdf document of continuum diagnostic plots:
+    Generate pdf document of continuum diagnostic plots, both with
+    and without uv-tapering
     1. Dirty image
     2. Clean image
     3. Residual image
@@ -916,7 +1100,6 @@ def contplot(field,my_cont_spws='',clean_params={}):
 
     Inputs:
       field  = field we're plotting
-      my_cont_spws = continuum spectral windows
       clean_params = dictionary of clean parameters
 
     Returns:
@@ -926,143 +1109,163 @@ def contplot(field,my_cont_spws='',clean_params={}):
     # start logger
     #
     logger = logging.getLogger("main")
-    goodplots = []
+    logger.info("Generating continuum images...")
+    #
+    # Setup parameters for zooming
+    #
     center_x = int(clean_params['imsize'][0]/2)
     center_y = int(clean_params['imsize'][1]/2)
-    blc = [center_x-int(center_x/2),center_y-int(center_y/2)]
-    trc = [center_x+int(center_x/2),center_y+int(center_y/2)]
-    zoom = {'blc':blc,'trc':trc}
+    # corners of plots for zooming
+    x_min = center_x-int(center_x/3)
+    x_max = center_x+int(center_x/3)
+    y_min = center_y-int(center_y/3)
+    y_max = center_y+int(center_y/3)
     #
-    # Generate combined continuum spw images
+    # Loop over all plot filenames
     #
-    logger.info("Generating combined continuum images...")
-    #
-    # Dirty image
-    #
-    raster = {'file':'{0}.cont.mfs.dirty.image.tt0'.format(field),
-              'colormap':'Greyscale 2',
-              'colorwedge':True}
-    out = '{0}.cont.mfs.dirty.image.png'.format(field)
-    casa.imview(raster=raster,zoom=zoom,out=out)
-    if os.path.exists(out): goodplots.append(out)
-    #
-    # Clean image
-    #
-    raster = {'file':'{0}.cont.mfs.clean.image.tt0'.format(field),
-              'colormap':'Greyscale 2',
-              'colorwedge':True}
-    out = '{0}.cont.mfs.clean.image.png'.format(field)
-    casa.imview(raster=raster,zoom=zoom,out=out)
-    if os.path.exists(out): goodplots.append(out)
-    #
-    # Residual image
-    #
-    raster = {'file':'{0}.cont.mfs.clean.residual.tt0'.format(field),
-              'colormap':'Greyscale 2',
-              'colorwedge':True}
-    out = '{0}.cont.mfs.clean.residual.png'.format(field)
-    casa.imview(raster=raster,zoom=zoom,out=out)
-    if os.path.exists(out): goodplots.append(out)
-    #
-    # Alpha image
-    #
-    raster = {'file':'{0}.cont.mfs.clean.image.alpha'.format(field),
-              'colormap':'Greyscale 2',
-              'colorwedge':True,
-              'range':[-5,5]}
-    out = '{0}.cont.mfs.clean.alpha.png'.format(field)
-    casa.imview(raster=raster,zoom=zoom,out=out)
-    if os.path.exists(out): goodplots.append(out)
-    #
-    # Alpha error
-    #
-    raster = {'file':'{0}.cont.mfs.clean.image.alpha.error'.format(field),
-              'colormap':'Greyscale 2',
-              'colorwedge':True,
-              'range':[0,1]}
-    out = '{0}.cont.mfs.clean.alpha.error.png'.format(field)
-    casa.imview(raster=raster,zoom=zoom,out=out)
-    if os.path.exists(out): goodplots.append(out)
-    #
-    # Beta image
-    #
-    raster = {'file':'{0}.cont.mfs.clean.image.beta'.format(field),
-              'colormap':'Greyscale 2',
-              'colorwedge':True,
-              'range':[-5,5]}
-    out = '{0}.cont.mfs.clean.beta.png'.format(field)
-    casa.imview(raster=raster,zoom=zoom,out=out)
-    if os.path.exists(out): goodplots.append(out)
-    logger.info("Done.")
-    #
-    # Loop over spws and generate images
-    #
-    for spw in my_cont_spws.split(','):
-        logger.info("Generating spw {0} continuum images...".format(spw))
+    fitsfiles = ['{0}.cont.mfs.dirty.image.fits'.format(field),
+                 '{0}.cont.mfs.clean.image.fits'.format(field),
+                 '{0}.cont.mfs.clean.residual.fits'.format(field),
+                 '{0}.cont.mfs.clean.alpha.fits'.format(field),
+                 '{0}.cont.mfs.clean.alpha.error.fits'.format(field),
+                 '{0}.cont.mfs.clean.beta.fits'.format(field),
+                 '{0}.cont.mfs.dirty.uvtaper.image.fits'.format(field),
+                 '{0}.cont.mfs.clean.uvtaper.image.fits'.format(field),
+                 '{0}.cont.mfs.clean.uvtaper.residual.fits'.format(field),
+                 '{0}.cont.mfs.clean.uvtaper.alpha.fits'.format(field),
+                 '{0}.cont.mfs.clean.uvtaper.alpha.error.fits'.format(field),
+                 '{0}.cont.mfs.clean.uvtaper.beta.fits'.format(field)]
+    titles = ['{0} - Dirty'.format(field),
+              '{0} - Clean'.format(field),
+              '{0} - Residual'.format(field),
+              '{0} - Spectral Index'.format(field),
+              '{0} - Spectral Index Error'.format(field),
+              '{0} - Beta'.format(field),
+              '{0} - Dirty - UV taper'.format(field),
+              '{0} - Clean - UV taper'.format(field),
+              '{0} - Residual - UV taper'.format(field),
+              '{0} - Spectral Index - UV taper'.format(field),
+              '{0} - Spectral Index Error - UV taper'.format(field),
+              '{0} - Beta - UV taper'.format(field)]
+    labels = ['Flux Density (Jy/beam)',
+              'Flux Density (Jy/beam)',
+              'Flux Density (Jy/beam)',
+              'Spectral Index',
+              'Spectral Index Error',
+              'Beta',
+              'Flux Density (Jy/beam)',
+              'Flux Density (Jy/beam)',
+              'Flux Density (Jy/beam)',
+              'Spectral Index',
+              'Spectral Index Error',
+              'Beta']
+    vlims = [(None,None),
+             (None,None),
+             (None,None),
+             (-2,1),
+             (0,1),
+             (-1,1),
+             (None,None),
+             (None,None),
+             (None,None),
+             (-2,1),
+             (0,1),
+             (-1,1)]
+    for fitsfile,title,label,vlim in zip(fitsfiles,titles,labels,vlims):
         #
-        # Dirty image
+        # Open fits file, generate WCS
         #
-        raster = {'file':'{0}.spw{1}.mfs.dirty.image.tt0'.format(field,spw),
-                  'colormap':'Greyscale 2',
-                  'colorwedge':True}
-        out = '{0}.spw{1}.mfs.dirty.image.png'.format(field,spw)
-        casa.imview(raster=raster,zoom=zoom,out=out)
-        if os.path.exists(out): goodplots.append(out)
+        hdu = fits.open(fitsfile)[0]
+        wcs = WCS(hdu.header)
         #
-        # Clean image
+        # Generate figure
         #
-        raster = {'file':'{0}.spw{1}.mfs.clean.image.tt0'.format(field,spw),
-                  'colormap':'Greyscale 2',
-                  'colorwedge':True}
-        out = '{0}.spw{1}.mfs.clean.image.png'.format(field,spw)
-        casa.imview(raster=raster,zoom=zoom,out=out)
-        if os.path.exists(out): goodplots.append(out)
+        plt.ioff()
+        fig = plt.figure()
+        ax = plt.subplot(projection=wcs.sub(['celestial']))
+        ax.set_title(title)
+        cax = ax.imshow(hdu.data[0,0],
+                        origin='lower',interpolation='none',
+                        cmap='binary',vmin=vlim[0],vmax=vlim[1])
+        # ax.grid(True,color='black',ls='solid')
+        ax.set_xlim(x_min,x_max)
+        ax.set_ylim(y_min,y_max)
+        ax.coords[0].set_major_formatter('hh:mm:ss')
+        ax.set_xlabel('RA (J2000)')
+        ax.set_ylabel('Declination (J2000)')
         #
-        # Residual image
+        # Add Galactic l,b locus
         #
-        raster = {'file':'{0}.spw{1}.mfs.clean.residual.tt0'.format(field,spw),
-                  'colormap':'Greyscale 2',
-                  'colorwedge':True}
-        out = '{0}.spw{1}.mfs.clean.residual.png'.format(field,spw)
-        casa.imview(raster=raster,zoom=zoom,out=out)
-        if os.path.exists(out): goodplots.append(out)
-        logger.info("Done.")
+        # overlay = ax.get_coords_overlay('galactic')
+        # overlay[0].set_axislabel('Galactic Longitude (deg)')
+        # overlay[1].set_axislabel('Galactic Latitude (deg)')
+        # overlay[0].set_major_formatter('d.dd')
+        # overlay[1].set_major_formatter('d.dd')
+        # overlay.grid(True,color='black',ls='dotted')
+        #
+        # Plot beam, if it is defined
+        #
+        if 'BMAJ' in hdu.header.keys():
+            cell = float(clean_params['cell'].replace('arcsec',''))
+            beam_maj = hdu.header['BMAJ']*3600./cell
+            beam_min = hdu.header['BMIN']*3600./cell
+            beam_pa = hdu.header['BPA']
+            ellipse = Ellipse((center_x-int(center_x/4),
+                            center_y-int(center_y/4)),
+                            beam_min,beam_maj,angle=beam_pa,
+                            fill=True,zorder=10,hatch='///',
+                            edgecolor='black',facecolor='white')
+            ax.add_patch(ellipse)
+        #
+        # Plot colorbar
+        #
+        cbar = fig.colorbar(cax,fraction=0.046,pad=0.04)
+        cbar.set_label(label)
+        #
+        # Re-scale to fit, then save
+        #
+        fig.savefig(fitsfile.replace('.fits','.pdf'),
+                    bbox_inches='tight')
+        plt.close(fig)
+        plt.ion()
     #
     # Generate PDF of plots
     #
     # need to fix filenames so LaTeX doesn't complain
-    for i in range(len(goodplots)):
-        goodplots[i] = '{'+goodplots[i].split('.png')[0]+'}.png'
+    outplots = ['{'+fn.replace('.fits','')+'}.pdf' for fn in fitsfiles]
     logger.info("Generating PDF...")
     with open('{0}.contplots.tex'.format(field),'w') as f:
         f.write(r"\documentclass{article}"+"\n")
         f.write(r"\usepackage{graphicx}"+"\n")
         f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
         f.write(r"\begin{document}"+"\n")
-        for i in range(0,len(goodplots),6):
+        for i in range(0,len(outplots),6):
             f.write(r"\begin{figure}"+"\n")
             f.write(r"\centering"+"\n")
-            f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i]+"}\n")
-            if len(goodplots) > i+3: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+3]+"}\n")
-            f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+1]+"}\n")
-            if len(goodplots) > i+4: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+4]+"}\n")
-            f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+2]+"}\n")
-            if len(goodplots) > i+5: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+5]+"}\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+outplots[i]+"}\n")
+            if len(outplots) > i+3: f.write(r"\includegraphics[width=0.45\textwidth]{"+outplots[i+3]+"}\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+outplots[i+1]+"}\n")
+            if len(outplots) > i+4: f.write(r"\includegraphics[width=0.45\textwidth]{"+outplots[i+4]+"}\n")
+            f.write(r"\includegraphics[width=0.45\textwidth]{"+outplots[i+2]+"}\n")
+            if len(outplots) > i+5: f.write(r"\includegraphics[width=0.45\textwidth]{"+outplots[i+5]+"}\n")
             f.write(r"\end{figure}"+"\n")
             f.write(r"\clearpage"+"\n")
         f.write(r"\end{document}")
     os.system('pdflatex -interaction=batchmode {0}.contplots.tex'.format(field))
     logger.info("Done.")
 
-def lineplot(field,my_line_spws='',clean_params={}):
+def lineplot(field,line_spws='',clean_params={}):
     """
     Generate pdf document of spectral line diagnostic plots:
     For each spectral window
-    1. spectrum, center pixel
+    1. Dirty image, center channel
+    2. Clean image, center channel
+    3. Residual image, center channel
+    4. Spectrum, center pixel
 
     Inputs:
       field  = field we're plotting
-      my_line_spws = line spectral windows
+      line_spws = line spectral windows to plot
       clean_params = dictionary of clean parameters
 
     Returns:
@@ -1072,77 +1275,175 @@ def lineplot(field,my_line_spws='',clean_params={}):
     # start logger
     #
     logger = logging.getLogger("main")
-    goodplots = []
+    logger.info("Generating line images...")
+    #
+    # Setup parameters for zooming
+    #
     center_x = int(clean_params['imsize'][0]/2)
     center_y = int(clean_params['imsize'][1]/2)
-    blc = [center_x-int(center_x/2),center_y-int(center_y/2)]
-    trc = [center_x+int(center_x/2),center_y+int(center_y/2)]
-    center_chan = int(clean_params['nchan']/2)
-    zoom = {'channel':center_chan,'blc':blc,'trc':trc}
+    # corners of plots for zooming
+    x_min = center_x-int(center_x/3)
+    x_max = center_x+int(center_x/3)
+    y_min = center_y-int(center_y/3)
+    y_max = center_y+int(center_y/3)
     #
-    # Loop over spws and generate images
+    # Loop over spectral windows
     #
-    for spw,lineid in zip(my_line_spws.split(','),clean_params['lineids']):
-        logger.info("Generating spw {0} line images...".format(spw))
+    goodplots = []
+    for spw in line_spws.split(','):
+        # check that this spectral window exists
+        if not os.path.exists('{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw)):
+            continue
         #
-        # Center pixel spectrum
+        # Loop over all plot filenames
         #
-        imagename = '{0}.spw{1}.channel.clean.image'.format(field,spw)
-        specfile = '{0}.spw{1}.channel.clean.image.specflux'.format(field,spw)
-        region='circle[[100pix,100pix],0.1pix]'
-        casa.specflux(imagename=imagename,region=region,function='mean',
-                      unit='km/s',logfile=specfile,overwrite=True)
-        if os.path.exists(specfile):
-            spec = np.genfromtxt(specfile,dtype=None,comments='#',
-                                 names=['channel','npix','frequency',
-                                        'velocity','flux'])
+        fitsfiles = ['{0}.spw{1}.channel.dirty.uvtaper.image.fits'.format(field,spw),
+                     '{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw),
+                     '{0}.spw{1}.channel.clean.uvtaper.residual.fits'.format(field,spw)]
+        titles = ['{0} - spw: {1} - Dirty - UV taper'.format(field,spw),
+                  '{0} - spw: {1} - Clean - UV taper'.format(field,spw),
+                  '{0} - spw: {1} - Residual - UV taper'.format(field,spw)]
+        labels = ['Flux Density (Jy/beam)',
+                  'Flux Density (Jy/beam)',
+                  'Flux Density (Jy/beam)']
+        vlims = [(None,None),
+                 (None,None),
+                 (None,None)]
+        for fitsfile,title,label,vlim in zip(fitsfiles,titles,labels,vlims):
+            #
+            # Open fits file, generate WCS
+            #
+            hdulist = fits.open(fitsfile)
+            hdu = hdulist[0]
+            wcs = WCS(hdu.header)
+            #
+            # Generate figure
+            #
             plt.ioff()
-            fig,ax = plt.subplots()
-            ax.plot(spec['velocity'],1000.*spec['flux'],'k-')
-            ax.set_xlabel('Velocity (km/s)')
-            ax.set_ylabel('Flux (mJy)')
-            ax.set_xlim(np.min(spec['velocity']),np.max(spec['velocity']))
-            ax.set_title(lineid)
-            out = '{0}.spw{1}.channel.clean.specflux.png'.format(field,spw)
-            fig.savefig(out)
+            fig = plt.figure()
+            ax = plt.subplot(projection=wcs.sub(['celestial']))
+            ax.set_title(title)
+            center_chan = hdu.data.shape[1]/2
+            img = ax.imshow(hdu.data[0,center_chan],
+                            origin='lower',interpolation='none',
+                            cmap='binary',vmin=vlim[0],vmax=vlim[1])
+            # ax.grid(True,color='black',ls='solid')
+            ax.set_xlim(x_min,x_max)
+            ax.set_ylim(y_min,y_max)
+            ax.coords[0].set_major_formatter('hh:mm:ss')
+            ax.set_xlabel('RA (J2000)')
+            ax.set_ylabel('Declination (J2000)')
+            #ax.set_position([0.2,0.15,0.6,0.6])
+            #
+            # Add Galactic l,b locus
+            #
+            # overlay = ax.get_coords_overlay('galactic')
+            # overlay[0].set_axislabel('Galactic Longitude (deg)')
+            # overlay[1].set_axislabel('Galactic Latitude (deg)')
+            # overlay[0].set_major_formatter('d.dd')
+            # overlay[1].set_major_formatter('d.dd')
+            # overlay.grid(True,color='black',ls='dotted')
+            #
+            # Plot beam, if it is defined
+            #
+            if 'BMAJ' in hdu.header.keys():
+                cell = float(clean_params['cell'].replace('arcsec',''))
+                beam_maj = hdu.header['BMAJ']*3600./cell
+                beam_min = hdu.header['BMIN']*3600./cell
+                beam_pa = hdu.header['BPA']
+                ellipse = Ellipse((center_x-int(center_x/4),
+                                center_y-int(center_y/4)),
+                                beam_min,beam_maj,angle=beam_pa,
+                                fill=True,zorder=10,hatch='///',
+                                edgecolor='black',facecolor='white')
+                ax.add_patch(ellipse)
+            elif len(hdulist) > 1:
+                hdu = hdulist[1]
+                cell = float(clean_params['cell'].replace('arcsec',''))
+                beam_maj = hdu.data['BMAJ'][center_chan]/cell
+                beam_min = hdu.data['BMIN'][center_chan]/cell
+                beam_pa = hdu.data['BPA'][center_chan]
+                ellipse = Ellipse((center_x-int(center_x/4),
+                                  center_y-int(center_y/4)),
+                                  beam_min,beam_maj,angle=beam_pa,
+                                  fill=True,zorder=10,hatch='///',
+                                  edgecolor='black',facecolor='white')
+                ax.add_patch(ellipse)
+            #
+            # Plot colorbar
+            #
+            cbar = fig.colorbar(img,fraction=0.046,pad=0.04)
+            cbar.set_label(label)
+            #
+            # Re-scale to fit, then save
+            #
+            fig.savefig(fitsfile.replace('.fits','.pdf'),
+                        bbox_inches='tight')
             plt.close(fig)
             plt.ion()
-            goodplots.append(out)
+            goodplots.append(fitsfile.replace('.fits','.pdf'))
+        #
+        # Generate spectrum
+        #
+        fitsfile = '{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw)
+        hdu = fits.open(fitsfile)[0]
+        spec = hdu.data[0,:,center_x,center_y]
+        velo = (np.arange(len(spec))*hdu.header['CDELT3'] + hdu.header['CRVAL3'])/1000.
+        #
+        # Generate figure
+        #
+        plt.ioff()
+        fig = plt.figure()
+        ax = plt.subplot()
+        ax.plot(velo,spec,'k-')
+        ax.set_xlabel('Velocity (km/s)')
+        ax.set_ylabel('Flux Density (Jy/beam)')
+        ax.set_xlim(np.min(velo),np.max(velo))
+        ybuff = 0.1*(np.max(spec)-np.min(spec))
+        ax.set_ylim(np.min(spec)-ybuff,np.max(spec)+ybuff)
+        ax.set_title('{0} - spw {1} - Center'.format(field,spw))
+        ax.grid(False)
+        fig.tight_layout()
+        fig.savefig(fitsfile.replace('.fits','.spec.pdf'),
+                    bbox_inches='tight')
+        plt.close(fig)
+        plt.ion()
+        goodplots.append(fitsfile.replace('.fits','.spec.pdf'))
     #
     # Generate PDF of plots
     #
     # need to fix filenames so LaTeX doesn't complain
-    for i in range(len(goodplots)):
-        goodplots[i] = '{'+goodplots[i].split('.png')[0]+'}.png'
+    goodplots = ['{'+fn.replace('.pdf','')+'}.pdf' for fn in goodplots]
     logger.info("Generating PDF...")
     with open('{0}.lineplots.tex'.format(field),'w') as f:
         f.write(r"\documentclass{article}"+"\n")
         f.write(r"\usepackage{graphicx}"+"\n")
         f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
         f.write(r"\begin{document}"+"\n")
-        for i in range(0,len(goodplots),6):
+        for i in range(0,len(goodplots),4):
             f.write(r"\begin{figure}"+"\n")
             f.write(r"\centering"+"\n")
             f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i]+"}\n")
             if len(goodplots) > i+1: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+1]+"}\n")
             if len(goodplots) > i+2: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+2]+"}\n")
             if len(goodplots) > i+3: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+3]+"}\n")
-            if len(goodplots) > i+4: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+4]+"}\n")
-            if len(goodplots) > i+5: f.write(r"\includegraphics[width=0.45\textwidth]{"+goodplots[i+5]+"}\n")
             f.write(r"\end{figure}"+"\n")
             f.write(r"\clearpage"+"\n")
         f.write(r"\end{document}")
     os.system('pdflatex -interaction=batchmode {0}.lineplots.tex'.format(field))
     logger.info("Done.")
 
-def main(field,vis='',config_file=''):
+def main(field,vis='',spws='',config_file='',uvtaper=False):
     """
     Generate continuum and line images in various ways
 
     Inputs:
       field       = field name to clean
       vis         = measurement set containing all data for field
+      spws        = comma-separated list of line spws to clean
+                    if empty, clean all line spws
       config_file = filename of the configuration file for this project
+      uvtaper     = if True, apply UV tapering
 
     Returns:
       Nothing
@@ -1167,7 +1468,12 @@ def main(field,vis='',config_file=''):
     #
     # initial setup
     #
-    my_cont_spws,my_line_spws,clean_params = setup(vis=vis,config=config)
+    my_cont_spws,all_line_spws,clean_params = setup(vis=vis,config=config)
+    if spws == '':
+        my_line_spws = all_line_spws
+    else:
+        my_line_spws = spws
+    logger.info("Considering line spws: {0}".format(my_line_spws))
     #
     # Regrid velocity axis
     #
@@ -1195,32 +1501,39 @@ def main(field,vis='',config_file=''):
         if answer == '0':
             mfs_dirty_cont(field=field,vis=vis,
                            my_cont_spws=my_cont_spws,
-                           clean_params=clean_params)
+                           clean_params=clean_params,
+                           uvtaper=uvtaper)
         elif answer == '1':
             channel_dirty_cont(field=field,vis=vis,
                                my_cont_spws=my_cont_spws,
-                               clean_params=clean_params)
+                               clean_params=clean_params,
+                               uvtaper=uvtaper)
         elif answer == '2':
             mfs_clean_cont(field=field,vis=vis,
                            my_cont_spws=my_cont_spws,
-                           clean_params=clean_params)
+                           clean_params=clean_params,
+                           uvtaper=uvtaper)
         elif answer == '3':
             channel_clean_cont(field=field,vis=vis,
                                my_cont_spws=my_cont_spws,
-                               clean_params=clean_params)
+                               clean_params=clean_params,
+                               uvtaper=uvtaper)
         elif answer == '4':
             mfs_dirty_cont_spws(field=field,vis=vis,
                                 my_cont_spws=my_cont_spws,
-                                clean_params=clean_params)
+                                clean_params=clean_params,
+                                uvtaper=uvtaper)
         elif answer == '5':
             mfs_clean_cont_spws(field=field,vis=vis,
                                 my_cont_spws=my_cont_spws,
-                                clean_params=clean_params)
+                                clean_params=clean_params,
+                                uvtaper=uvtaper)
         elif answer == '6':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
             mfs_clean_cont_spw(field=field,vis=vis,spw=spw,
-                               clean_params=clean_params)
+                               clean_params=clean_params,
+                               uvtaper=uvtaper)
         elif answer == '7':
             print("Which spw did you clean manually?")
             manual_spw = raw_input('> ')
@@ -1230,24 +1543,27 @@ def main(field,vis='',config_file=''):
                                      my_cont_spws=my_cont_spws,
                                      manual_spw=manual_spw,
                                      threshold=cont_threshold,
-                                     clean_params=clean_params)
+                                     clean_params=clean_params,
+                                     uvtaper=uvtaper)
         elif answer == '8':
             channel_dirty_line_spws(field=field,vis=vis,
                                     my_line_spws=my_line_spws,
                                     clean_params=clean_params,
-                                    config=config)
+                                    config=config,
+                                    uvtaper=uvtaper)
         elif answer == '9':
             channel_clean_line_spws(field=field,vis=vis,
                                     my_line_spws=my_line_spws,
                                     clean_params=clean_params,
-                                    config=config)
+                                    config=config,
+                                    uvtaper=uvtaper)
         elif answer == '10':
             print("Which spw do you want to clean?")
             spw = raw_input('> ')
             channel_clean_line_spw(field=field,vis=vis,spw=spw,
-                                   my_line_spws=my_line_spws,
                                    clean_params=clean_params,
-                                   config=config)
+                                   config=config,
+                                   uvtaper=uvtaper)
         elif answer == '11':
             print("Which spw did you clean manually?")
             manual_spw = raw_input('> ')
@@ -1258,12 +1574,12 @@ def main(field,vis='',config_file=''):
                                          manual_spw=manual_spw,
                                          threshold=line_threshold,
                                          clean_params=clean_params,
-                                         config=config)
+                                         config=config,
+                                         uvtaper=uvtaper)
         elif answer == '12':
-            contplot(field,my_cont_spws=my_cont_spws,
-                     clean_params=clean_params)
+            contplot(field,clean_params=clean_params)
         elif answer == '13':
-            lineplot(field,my_line_spws=my_line_spws,
+            lineplot(field,line_spws=all_line_spws,
                      clean_params=clean_params)
         elif answer.lower() == 'q' or answer.lower() == 'quit':
             break

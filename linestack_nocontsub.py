@@ -49,7 +49,7 @@ def setup(config=None):
     logger.info("Found line spws: {0}".format(my_line_spws))
     return (my_cont_spws,my_line_spws)
 
-def combeam_line_spws(field,my_line_spws='',overwrite=False,
+def combeam_line_spws(field,my_line_spws='',
                       linetype='clean'):
     """
     Smooth each line spw to common beam within that spw (i.e. if
@@ -58,8 +58,6 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False,
     Inputs:
       field        = field to analyze
       my_line_spws = comma separated string of line spws
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
 
     Returns:
       Nothing
@@ -76,14 +74,10 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False,
             continue
         outfile='{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(outfile):
-            if overwrite:
-                logger.info("Overwriting {0}".format(outfile))
-                shutil.rmtree(outfile)
-            else:
-                logger.info("{0} exists.".format(outfile))
-                continue
+            logger.info("{0} exists.".format(outfile))
+            continue
         casa.imsmooth(imagename=imagename,kernel='commonbeam',
-                      outfile=outfile,overwrite=overwrite)
+                      outfile=outfile)
     logger.info("Done!")
 
 def smooth_all(field,my_line_spws='',config=None,overwrite=False,
@@ -164,19 +158,23 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
         casa.imsmooth(imagename=contimage,kernel='gauss',
                       targetres=True,major=bmaj_target,minor=bmin_target,
                       pa=bpa_target,outfile=outfile,overwrite=overwrite)
+        casa.exportfits(imagename=outfile,fitsimage='{0}.fits'.format(outfile),
+                        overwrite=True,history=False)
     # Smooth lines, rename with lineid
-    lineids = config.get('Clean','lineids').split(',')
-    for spw,lineid in zip(my_line_spws.split(','),lineids):
+    for spw in my_line_spws.split(','):
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
+        lineid = config.get("Clean","lineids").split(',')[spw_ind]
         lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
-        if os.path.isdir(lineimage):
-            outfile = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
-            casa.imsmooth(imagename=lineimage,kernel='gauss',
-                          targetres=True,major=bmaj_target,minor=bmin_target,
-                          pa=bpa_target,outfile=outfile,overwrite=overwrite)
+        outfile = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
+        casa.imsmooth(imagename=lineimage,kernel='gauss',
+                      targetres=True,major=bmaj_target,minor=bmin_target,
+                      pa=bpa_target,outfile=outfile,overwrite=overwrite)
+        casa.exportfits(imagename=outfile,fitsimage='{0}.fits'.format(outfile),
+                        overwrite=True,history=False,velocity=True)
     logger.info("Done!")
 
 def stack_line(field,stackedimage,
-               lineids=[],config=None,overwrite=False,
+               my_line_spws='',config=None,overwrite=False,
                linetype='clean'):
     """
     Stack line images
@@ -184,7 +182,7 @@ def stack_line(field,stackedimage,
     Inputs:
       field        = field to analyze
       stackedimage = what to name the stacked image
-      lineids      = lines to stack, if empty use all lines
+      my_line_spws = spectral windows to stack
       overwrite    = if True, overwrite steps as necessary
                      if False, skip steps if output already exists
 
@@ -196,24 +194,23 @@ def stack_line(field,stackedimage,
     #
     logger = logging.getLogger("main")
     #
-    # Check if we supplied lineids
+    # Get lineids
     #
-    if len(lineids) == 0:
-        lineids = config.get("Clean","lineids").split(',')
-        goodlineids = []
-        for lineid in lineids:
-            if os.path.isdir('{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)):
-                goodlineids.append(lineid)
-        lineids = goodlineids
+    lineids = []
+    for spw in my_line_spws.split(','):
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
+        lineids += [config.get("Clean","lineids").split(',')[spw_ind]]
     logger.info("Stacking lines {0}".format(lineids))
     images = ['{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
     ims = ['IM{0}'.format(foo) for foo in range(len(images))]
     myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
     casa.immath(imagename=images,outfile=stackedimage,mode='evalexpr',
                 expr=myexp)
+    casa.exportfits(imagename=stackedimage,fitsimage='{0}.fits'.format(stackedimage),
+                    overwrite=True,history=False,velocity=True)
     logger.info("Done!")
 
-def main(field,stackedimage,lineids=[],config_file='',overwrite=False,
+def main(field,stackedimage,spws='',config_file='',overwrite=False,
          linetype='clean'):
     """
     Continuum subtract, smooth line images to common beam, 
@@ -223,7 +220,7 @@ def main(field,stackedimage,lineids=[],config_file='',overwrite=False,
     Inputs:
       field       = field to analyze
       stackedimage = what to name the stacked image
-      lineids     = lines to stack, if empty all lines
+      spws        = spectral windows to stack. if '', stack all line spws
       config_file = filename of the configuration file for this project
       overwrite   = if True, overwrite steps as necessary
                     if False, skip steps if output already exists
@@ -252,11 +249,16 @@ def main(field,stackedimage,lineids=[],config_file='',overwrite=False,
     #
     # initial setup
     #
-    my_cont_spws,my_line_spws = setup(config=config)
+    my_cont_spws,all_line_spws = setup(config=config)
+    if spws == '':
+        my_line_spws = all_line_spws
+    else:
+        my_line_spws = spws
+    logger.info("Considering line spws: {0}".format(my_line_spws))
     #
     # smooth line images to common beam
     #
-    combeam_line_spws(field,my_line_spws=my_line_spws,overwrite=overwrite,
+    combeam_line_spws(field,my_line_spws=my_line_spws,
                       linetype=linetype)
     #
     # Smooth all line and continuum images to common beam, rename
@@ -267,5 +269,5 @@ def main(field,stackedimage,lineids=[],config_file='',overwrite=False,
     #
     # Stack line images
     #
-    stack_line(field,stackedimage,lineids=lineids,config=config,
+    stack_line(field,stackedimage,my_line_spws=my_line_spws,config=config,
                overwrite=overwrite,linetype=linetype)
