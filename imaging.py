@@ -637,12 +637,18 @@ def auto_mfs_clean_cont_spws(field='',vis='',my_cont_spws='',
     imagename = '{0}.spw{1}.mfs.clean'.format(field,manual_spw)
     if uvtaper:
         imagename = imagename + '.uvtaper'
-    shutil.rmtree('{0}.image'.format(imagename))
-    shutil.rmtree('{0}.pbcor'.format(imagename))
-    shutil.rmtree('{0}.residual'.format(imagename))
-    shutil.rmtree('{0}.model'.format(imagename))
-    shutil.rmtree('{0}.psf'.format(imagename))
-    shutil.rmtree('{0}.flux'.format(imagename))
+    if os.path.isdir('{0}.image'.format(imagename)):
+        shutil.rmtree('{0}.image'.format(imagename))
+    if os.path.isdir('{0}.pbcor'.format(imagename)):
+        shutil.rmtree('{0}.pbcor'.format(imagename))
+    if os.path.isdir('{0}.residual'.format(imagename)):
+        shutil.rmtree('{0}.residual'.format(imagename))
+    if os.path.isdir('{0}.model'.format(imagename)):
+        shutil.rmtree('{0}.model'.format(imagename))
+    if os.path.isdir('{0}.psf'.format(imagename)):
+        shutil.rmtree('{0}.psf'.format(imagename))
+    if os.path.isdir('{0}.flux'.format(imagename)):
+        shutil.rmtree('{0}.flux'.format(imagename))
     #
     # Loop over spectral windows
     #
@@ -1005,12 +1011,18 @@ def auto_channel_clean_line_spws(field='',vis='',my_line_spws='',
     imagename = '{0}.spw{1}.channel.clean'.format(field,manual_spw)
     if uvtaper:
         imagename = imagename + '.uvtaper'
-    shutil.rmtree('{0}.image'.format(imagename))
-    shutil.rmtree('{0}.pbcor'.format(imagename))
-    shutil.rmtree('{0}.residual'.format(imagename))
-    shutil.rmtree('{0}.model'.format(imagename))
-    shutil.rmtree('{0}.psf'.format(imagename))
-    shutil.rmtree('{0}.flux'.format(imagename))
+    if os.path.isdir('{0}.image'.format(imagename)):
+        shutil.rmtree('{0}.image'.format(imagename))
+    if os.path.isdir('{0}.pbcor'.format(imagename)):
+        shutil.rmtree('{0}.pbcor'.format(imagename))
+    if os.path.isdir('{0}.residual'.format(imagename)):
+        shutil.rmtree('{0}.residual'.format(imagename))
+    if os.path.isdir('{0}.model'.format(imagename)):
+        shutil.rmtree('{0}.model'.format(imagename))
+    if os.path.isdir('{0}.psf'.format(imagename)):
+        shutil.rmtree('{0}.psf'.format(imagename))
+    if os.path.isdir('{0}.flux'.format(imagename)):
+        shutil.rmtree('{0}.flux'.format(imagename))
     #
     # Loop over spectral windows
     #

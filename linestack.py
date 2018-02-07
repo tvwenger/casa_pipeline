@@ -49,136 +49,7 @@ def setup(config=None):
     logger.info("Found line spws: {0}".format(my_line_spws))
     return (my_cont_spws,my_line_spws)
 
-class ClickPlot:
-    """
-    Generic class for generating and interacting with matplotlib figures
-    """
-    def __init__(self,num):
-        self.fig = plt.figure(num)
-        plt.clf()
-        print "Created figure",self.fig.number
-        self.ax = self.fig.add_subplot(111)
-        self.clickbutton = []
-        self.clickx_data = []
-        self.clicky_data = []
-
-    def onclick(self,event):
-        """
-        Handle click event
-        """
-        if event.button not in [1,3]:
-            return
-        try:
-            print "Click at ({0:.2f},{1:.2f})".format(event.xdata,
-                                                      event.ydata)
-        except ValueError:
-            return
-        self.clickbutton.append(event.button)
-        self.clickx_data.append(event.xdata)
-        self.clicky_data.append(event.ydata)
-
-    def get_line_free_regions(self,xdata,ydata,xlabel=None,ylabel=None):
-        """
-        Using click events to get the line free regions of a
-        spectrum
-        """
-        self.ax.clear()
-        self.ax.plot(xdata,ydata,'k-')
-        self.ax.set_xlabel(xlabel)
-        self.ax.set_ylabel(ylabel)
-        self.clickbutton = []
-        self.clickx_data = []
-        self.clicky_data = []
-        print "Left click to select start of line-free-region."
-        print "Left click again to select end of line-free-region."
-        print "Repeat as necessary."
-        print "Right click when done."
-        cid = self.fig.canvas.mpl_connect('button_press_event',
-                                          self.onclick)
-        self.fig.show()
-        while True:
-            self.fig.waitforbuttonpress()
-            if 3 in self.clickbutton:
-                break
-            elif 1 in self.clickbutton:
-                self.ax.axvline(self.clickx_data[-1])
-        self.fig.canvas.mpl_disconnect(cid)
-        # remove last element (right-click)
-        self.clickx_data = self.clickx_data[0:-1]
-        # check that there are an even number, otherwise remove last
-        # element
-        if len(self.clickx_data) % 2 != 0:
-            self.clickx_data = self.clickx_data[0:-1]
-        regions = zip(self.clickx_data[::2],self.clickx_data[1::2])
-        return regions
-
-def contsub(field,my_line_spws='',overwrite=False,linetype='clean'):
-    """
-    Subtact continuum from line spws, save line-free-region RMS
-    to file.
-
-    Inputs:
-      field        = field to analyze
-      my_line_spws = comma separated string of line spws
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    logger.info("Performing continuum subtraction")
-    with open('{0}.line_rms.txt'.format(field),'w') as f:
-        for spw in my_line_spws.split(','):
-            imagename='{0}.spw{1}.{2}.pbcor'.format(field,spw,linetype)
-            if not os.path.isdir(imagename):
-                logger.warn("{0} was not found!".format(imagename))
-                continue
-            region='{0}.spw{1}.reg'.format(field,spw)
-            if not os.path.exists(region):
-                logger.warn("{0} was not found!".format(region))
-                region='{0}.reg'.format(field)
-                if not os.path.exists(region):
-                    logger.warn("{0} was not found, skipping...".format(region))
-                    continue
-            linefile='{0}.spw{1}.{2}.line'.format(field,spw,linetype)
-            contfile='{0}.spw{1}.{2}.cont'.format(field,spw,linetype)
-            if os.path.isdir(linefile) or os.path.isdir(contfile):
-                if overwrite:
-                    logger.info("Overwriting {0}".format(linefile))
-                    logger.info("Overwriting {0}".format(contfile))
-                    shutil.rmtree(linefile)
-                    shutil.rmtree(contfile)
-                else:
-                    logger.info("{0} or {1} exists.".format(linefile,contfile))
-                    continue
-            stats = casa.imstat(imagename=imagename,region=region,axes=[0,1])
-            myplot = ClickPlot(0)
-            regs = myplot.get_line_free_regions(range(len(stats['flux'])),
-                                                stats['flux'],
-                                                xlabel='channel',
-                                                ylabel='flux (Jy)')
-            chans = []
-            fluxdata = np.array([])
-            for idx,reg in enumerate(regs):
-                start,end = int(reg[0]),int(reg[1])
-                if start < 0:
-                    start = 0
-                if end >= len(stats['flux']):
-                    end = len(stats['flux'])-1
-                chans.append('{0}~{1}'.format(start,end))
-                fluxdata = np.append(fluxdata,stats['flux'][start:end])
-            chans = ','.join(chans)
-            casa.imcontsub(imagename=imagename,linefile=linefile,
-                           contfile=contfile,chans=chans)
-            rms = np.sqrt(np.mean((fluxdata-np.mean(fluxdata))**2.))
-            f.write('{0:2} {1:6.3f}\n'.format(spw,rms))
-    logger.info("Done!")
-
-def combeam_line_spws(field,my_line_spws='',overwrite=False,
+def combeam_line_spws(field,my_line_spws='',
                       linetype='clean'):
     """
     Smooth each line spw to common beam within that spw (i.e. if
@@ -187,8 +58,6 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False,
     Inputs:
       field        = field to analyze
       my_line_spws = comma separated string of line spws
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
 
     Returns:
       Nothing
@@ -199,20 +68,16 @@ def combeam_line_spws(field,my_line_spws='',overwrite=False,
     logger = logging.getLogger("main")
     logger.info("Smoothing each line spw to common beam")
     for spw in my_line_spws.split(','):
-        imagename='{0}.spw{1}.{2}.line'.format(field,spw,linetype)
+        imagename='{0}.spw{1}.channel.{2}.pbcor'.format(field,spw,linetype)
         if not os.path.isdir(imagename):
             logger.warn("{0} was not found!".format(imagename))
             continue
-        outfile='{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
+        outfile='{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if os.path.isdir(outfile):
-            if overwrite:
-                logger.info("Overwriting {0}".format(outfile))
-                shutil.rmtree(outfile)
-            else:
-                logger.info("{0} exists.".format(outfile))
-                continue
+            logger.info("{0} exists.".format(outfile))
+            continue
         casa.imsmooth(imagename=imagename,kernel='commonbeam',
-                      outfile=outfile,overwrite=overwrite)
+                      outfile=outfile)
     logger.info("Done!")
 
 def smooth_all(field,my_line_spws='',config=None,overwrite=False,
@@ -247,39 +112,38 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
     # available images
     #
     logger.info("Finding largest synthesized beam")
-    bmaj = []
-    bmin = []
-    bpa = []
-    contimage = '{0}.cont.clean.pbcor'.format(field)
-    print(contimage)
+    bmajs = []
+    bmins = []
+    bpas = []
+    contimage = '{0}.cont.mfs.clean.pbcor'.format(field)
     if not os.path.isdir(contimage):
         logger.warn("{0} not found!".format(contimage))
     else:
-        bmaj.append(casa.imhead(imagename=contimage,mode='get',
-                                hdkey='beammajor')['value'])
-        bmin.append(casa.imhead(imagename=contimage,mode='get',
-                                hdkey='beamminor')['value'])
-        bpa.append(casa.imhead(imagename=contimage,mode='get',
-                               hdkey='beampa')['value'])
+        bmajs.append(casa.imhead(imagename=contimage,mode='get',
+                                 hdkey='beammajor')['value'])
+        bmins.append(casa.imhead(imagename=contimage,mode='get',
+                                 hdkey='beamminor')['value'])
+        bpas.append(casa.imhead(imagename=contimage,mode='get',
+                                hdkey='beampa')['value'])
     for spw in my_line_spws.split(','):
-        lineimage = '{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
+        lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
         if not os.path.isdir(lineimage):
             logger.warn("{0} not found!".format(lineimage))
             continue
-        bmaj.append(casa.imhead(imagename=lineimage,mode='get',
+        bmajs.append(casa.imhead(imagename=lineimage,mode='get',
                                 hdkey='beammajor')['value'])
-        bmin.append(casa.imhead(imagename=lineimage,mode='get',
+        bmins.append(casa.imhead(imagename=lineimage,mode='get',
                                 hdkey='beamminor')['value'])
-        bpa.append(casa.imhead(imagename=lineimage,mode='get',
-                               hdkey='beampa')['value'])
+        bpas.append(casa.imhead(imagename=lineimage,mode='get',
+                                hdkey='beampa')['value'])
     #
-    # Smooth available images to maximum beam size + 2*cell_size
-    # and mean position angle
+    # Smooth available images to maximum (circular) beam size
+    # + 0.1 pixel size (otherwise imsmooth will complain)
     #
     cell_size = float(config.get("Clean","cell").replace('arcsec',''))
-    bmaj_target = np.max(bmaj)+2.*cell_size
-    bmin_target = np.max(bmaj)+2.*cell_size
-    bpa_target = np.mean(bpa)
+    bmaj_target = np.max(bmajs)+0.1*cell_size
+    bmin_target = np.max(bmajs)+0.1*cell_size
+    bpa_target = 0.
     logger.info("Smoothing all images to")
     logger.info("Major axis: {0} arcsec".format(bmaj_target))
     logger.info("Minor axis: {0} arcsec".format(bmin_target))
@@ -287,29 +151,38 @@ def smooth_all(field,my_line_spws='',config=None,overwrite=False,
     bmaj_target = {'unit':'arcsec','value':bmaj_target}
     bmin_target = {'unit':'arcsec','value':bmin_target}
     bpa_target = {'unit':'deg','value':bpa_target}
-    contimage = '{0}.cont.clean.pbcor'.format(field)
+    contimage = '{0}.cont.mfs.clean.pbcor'.format(field)
+    # Smooth continuum
     if os.path.isdir(contimage):
-        outfile='{0}.cont.imsmooth'.format(field)
+        outfile='{0}.cont.mfs.imsmooth'.format(field)
         casa.imsmooth(imagename=contimage,kernel='gauss',
                       targetres=True,major=bmaj_target,minor=bmin_target,
                       pa=bpa_target,outfile=outfile,overwrite=overwrite)
-    for spw,lineid in zip(my_line_spws.split(','),config.get('Clean','lineids').split(',')):
-        lineimage = '{0}.spw{1}.{2}.line.combeam'.format(field,spw,linetype)
-        if os.path.isdir(lineimage):
-            outfile = '{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype)
-            casa.imsmooth(imagename=lineimage,kernel='gauss',
-                          targetres=True,major=bmaj_target,minor=bmin_target,
-                          pa=bpa_target,outfile=outfile,overwrite=overwrite)
+        casa.exportfits(imagename=outfile,fitsimage='{0}.fits'.format(outfile),
+                        overwrite=True,history=False)
+    # Smooth lines, rename with lineid
+    for spw in my_line_spws.split(','):
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
+        lineid = config.get("Clean","lineids").split(',')[spw_ind]
+        lineimage = '{0}.spw{1}.channel.{2}.pbcor.combeam'.format(field,spw,linetype)
+        outfile = '{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype)
+        casa.imsmooth(imagename=lineimage,kernel='gauss',
+                      targetres=True,major=bmaj_target,minor=bmin_target,
+                      pa=bpa_target,outfile=outfile,overwrite=overwrite)
+        casa.exportfits(imagename=outfile,fitsimage='{0}.fits'.format(outfile),
+                        overwrite=True,history=False,velocity=True)
     logger.info("Done!")
 
-def stack_line(field,lineids=[],config=None,overwrite=False,
+def stack_line(field,stackedimage,
+               my_line_spws='',config=None,overwrite=False,
                linetype='clean'):
     """
     Stack line images
 
     Inputs:
       field        = field to analyze
-      lineids      = lines to stack, if empty use all lines
+      stackedimage = what to name the stacked image
+      my_line_spws = spectral windows to stack
       overwrite    = if True, overwrite steps as necessary
                      if False, skip steps if output already exists
 
@@ -321,83 +194,23 @@ def stack_line(field,lineids=[],config=None,overwrite=False,
     #
     logger = logging.getLogger("main")
     #
-    # Check if we supplied lineids
+    # Get lineids
     #
-    if len(lineids) == 0:
-        lineids = config.get("Clean","lineids").split(',')
+    lineids = []
+    for spw in my_line_spws.split(','):
+        spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
+        lineids += [config.get("Clean","lineids").split(',')[spw_ind]]
     logger.info("Stacking lines {0}".format(lineids))
-    images = ['{0}.{1}.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
+    images = ['{0}.{1}.channel.{2}.imsmooth'.format(field,lineid,linetype) for lineid in lineids]
     ims = ['IM{0}'.format(foo) for foo in range(len(images))]
     myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
-    outfile='{0}.Halpha_{1}lines.{2}.image'.format(field,str(len(images)),linetype)
-    casa.immath(imagename=images,outfile=outfile,mode='evalexpr',
+    casa.immath(imagename=images,outfile=stackedimage,mode='evalexpr',
                 expr=myexp)
-    logger.info("Done!")
-    return outfile
-
-def moment0_image(stackedimage='',overwrite=False):
-    """
-    Stack line images
-
-    Inputs:
-      stackedimage = filename of line-stacked image
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    outfile = stackedimage+'.mom0'
-    if os.path.isdir(outfile):
-        if overwrite:
-            logger.info("Overwriting {0}".format(outfile))
-            shutil.rmtree(outfile)
-        else:
-            logger.info("Found {0}".format(outfile))
-            return outfile
-    logger.info("Creating moment 0 map")
-    casa.immoments(stackedimage,moments=0,outfile=outfile)
-    logger.info("Done!")
-    return outfile
-
-def linetocont_image(field,moment0image='',overwrite=False,
-                     linetype='clean'):
-    """
-    Stack line images
-
-    Inputs:
-      field        = field to analyze
-      moment0image = filename of line-stacked moment 0 image
-      overwrite    = if True, overwrite steps as necessary
-                     if False, skip steps if output already exists
-
-    Returns:
-      Nothing
-    """
-    #
-    # start logger
-    #
-    logger = logging.getLogger("main")
-    logger.info("Creating line-to-continuum image")
-    if not os.path.isdir(moment0image):
-        logger.warn("{0} does not exist".format(moment0image))
-        return
-    contimage='{0}.cont.imsmooth'.format(field)
-    if not os.path.isdir(contimage):
-        logger.warn("{0} does not exist".format(contimage))
-        return
-    outfile='{0}.linetocont.{1}.image'.format(field,linetype)
-    images = [moment0image,contimage]
-    myexp = 'IM0/IM1'
-    casa.immath(imagename=images,outfile=outfile,mode='evalexpr',
-                expr=myexp)
+    casa.exportfits(imagename=stackedimage,fitsimage='{0}.fits'.format(stackedimage),
+                    overwrite=True,history=False,velocity=True)
     logger.info("Done!")
 
-def main(field,lineids=[],config_file='',overwrite=False,
+def main(field,stackedimage,spws='',config_file='',overwrite=False,
          linetype='clean'):
     """
     Continuum subtract, smooth line images to common beam, 
@@ -406,7 +219,8 @@ def main(field,lineids=[],config_file='',overwrite=False,
 
     Inputs:
       field       = field to analyze
-      lineids     = lines to stack, if empty all lines
+      stackedimage = what to name the stacked image
+      spws        = spectral windows to stack. if '', stack all line spws
       config_file = filename of the configuration file for this project
       overwrite   = if True, overwrite steps as necessary
                     if False, skip steps if output already exists
@@ -435,16 +249,16 @@ def main(field,lineids=[],config_file='',overwrite=False,
     #
     # initial setup
     #
-    my_cont_spws,my_line_spws = setup(config=config)
-    #
-    # Continuum subtact line images
-    #
-    contsub(field,my_line_spws=my_line_spws,overwrite=overwrite,
-            linetype=linetype)
+    my_cont_spws,all_line_spws = setup(config=config)
+    if spws == '':
+        my_line_spws = all_line_spws
+    else:
+        my_line_spws = spws
+    logger.info("Considering line spws: {0}".format(my_line_spws))
     #
     # smooth line images to common beam
     #
-    combeam_line_spws(field,my_line_spws=my_line_spws,overwrite=overwrite,
+    combeam_line_spws(field,my_line_spws=my_line_spws,
                       linetype=linetype)
     #
     # Smooth all line and continuum images to common beam, rename
@@ -455,14 +269,5 @@ def main(field,lineids=[],config_file='',overwrite=False,
     #
     # Stack line images
     #
-    stackedimage = stack_line(field,lineids=lineids,config=config,
-                              overwrite=overwrite,linetype=linetype)
-    #
-    # make moment 0 image
-    #
-    moment0image = moment0_image(stackedimage,overwrite=overwrite)
-    #
-    # create line-to-continuum image using stacked line image
-    #
-    linetocont_image(field,moment0image=moment0image,overwrite=overwrite,
-                     linetype=linetype)
+    stack_line(field,stackedimage,my_line_spws=my_line_spws,config=config,
+               overwrite=overwrite,linetype=linetype)
