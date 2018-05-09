@@ -777,7 +777,8 @@ def manual_flag_calibrators(vis='',primary_cals=[],secondary_cals=[],
 
 def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
                           flux_cals=[],my_line_spws='',
-                          my_cont_spws='',refant='',config=None):
+                          my_cont_spws='',refant='',calwt=False,
+                          config=None):
     """
     Calculate calibration solutions (bandpass, delays, complex gains)
     and apply the calibration solutions to the calibrators
@@ -790,6 +791,7 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
       my_line_spws   = comma-separated string of line spws
       my_cont_spws   = comma-separated string of continuum spws
       refant         = reference antenna
+      calwt          = if True, apply calibration weights to data
       config         = ConfigParser object for this project
 
     Returns:
@@ -1104,7 +1106,7 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     #
     logger.info("Applying calibration tables to all calibrators...")
     for field in primary_cals+secondary_cals:
-        casa.applycal(vis=vis,field=field,calwt=False,
+        casa.applycal(vis=vis,field=field,calwt=calwt,
                       gaintable=['delays.Kcal','bandpass.Bcal',
                                  'phase_int.Gcal1','apcal_scan.Gcal',
                                  'flux.cal'],
@@ -1146,13 +1148,14 @@ def calibrate_calibrators(vis='',primary_cals=[],secondary_cals=[],
     os.system('pdflatex -interaction=batchmode plotcal_figures.tex')
     logger.info("Done.")
 
-def calibrate_sciencetargets(vis='',science_targets=[]):
+def calibrate_sciencetargets(vis='',science_targets=[],calwt=False):
     """
     Apply calibration solutions to science targets
 
     Inputs:
       vis             = measurement set
       science_targets = list of science targets
+      calwt           = if True, apply calibration weights to data
 
     Returns:
       Nothing    
@@ -1167,7 +1170,7 @@ def calibrate_sciencetargets(vis='',science_targets=[]):
         # use nearest field in complex gains and flux
         #
         logger.info("Applying calibration solutions to {0}".format(field))
-        casa.applycal(vis=vis,field=field,calwt=False,
+        casa.applycal(vis=vis,field=field,calwt=calwt,
                       gaintable=['delays.Kcal','bandpass.Bcal',
                                  'phase_scan.Gcal','apcal_scan.Gcal',
                                  'flux.cal'],
@@ -1419,13 +1422,14 @@ def split_fields(vis='',primary_cals=[],secondary_cals=[],science_targets=[]):
         casa.split(vis=vis,outputvis=outputvis,field=field,keepflags=False)
     logger.info("Done!")
 
-def main(vis='',config_file='',auto=False):
+def main(vis='',config_file='',calwt=False,auto=False):
     """
     Run the CASA data reduction pipeline
 
     Inputs:
       vis         = measurement set
       config_file = filename of the configuration file for this project
+      calwt       = if True, apply calibration weights to data
       auto        = if True, automatically run the pipeline and do not
                     prompt the user for anything other than the
                     reference antenna at the start
@@ -1478,7 +1482,7 @@ def main(vis='',config_file='',auto=False):
                               flux_cals=flux_cals,
                               my_line_spws=my_line_spws,
                               my_cont_spws=my_cont_spws,
-                              refant=refant,config=config)
+                              refant=refant,calwt=calwt,config=config)
         auto_flag_calibrators(vis=vis,primary_cals=primary_cals,
                               secondary_cals=secondary_cals)
         calibrate_calibrators(vis=vis,primary_cals=primary_cals,
@@ -1486,11 +1490,11 @@ def main(vis='',config_file='',auto=False):
                               flux_cals=flux_cals,
                               my_line_spws=my_line_spws,
                               my_cont_spws=my_cont_spws,
-                              refant=refant,config=config)
+                              refant=refant,calwt=calwt,config=config)
         gen_calibrator_plots(vis=vis,primary_cals=primary_cals,
                              secondary_cals=secondary_cals,
                              config=config)
-        calibrate_sciencetargets(vis=vis,science_targets=science_targets)
+        calibrate_sciencetargets(vis=vis,science_targets=science_targets,calwt=calwt)
         auto_flag_sciencetargets(vis=vis,science_targets=science_targets)
         gen_sciencetarget_plots(vis=vis,science_targets=science_targets,
                                 config=config)
@@ -1537,9 +1541,9 @@ def main(vis='',config_file='',auto=False):
                                   flux_cals=flux_cals,
                                   my_line_spws=my_line_spws,
                                   my_cont_spws=my_cont_spws,
-                                  refant=refant,config=config)
+                                  refant=refant,calwt=calwt,config=config)
         elif answer == '5':
-            calibrate_sciencetargets(vis=vis,science_targets=science_targets)
+            calibrate_sciencetargets(vis=vis,science_targets=science_targets,calwt=calwt)
         elif answer == '6':
             auto_flag_sciencetargets(vis=vis,science_targets=science_targets)
         elif answer == '7':

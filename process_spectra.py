@@ -1,7 +1,7 @@
 """
-calc_te.py
-CASA Data Reduction Pipeline - Calculate electron temperature
-Trey V. Wenger, Wesley Red July 2017 - V1.0
+process_spectra.py
+CASA Data Reduction Pipeline - Analyze spectra
+Trey V. Wenger Feb 2018 - V1.0
 """
 
 import __main__ as casa # import casa namespace
@@ -54,7 +54,7 @@ class ClickPlot:
         self.clickx_data.append(event.xdata)
         self.clicky_data.append(event.ydata)
 
-    def get_line_free_regions(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
+    def line_free(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
         """
         Using click events to get the line free regions of a
         spectrum
@@ -103,7 +103,7 @@ class ClickPlot:
         regions = zip(nregions[::2],nregions[1::2])
         return regions
 
-    def auto_get_line_free_regions(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
+    def auto_line_free(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
         """
         Automatically get the line free regions of a
         spectrum
@@ -152,9 +152,9 @@ class ClickPlot:
                 self.ax.axvline(xdata[chs[0]])
                 self.ax.axvline(xdata[chs[-1]])
                 self.fig.show()
-        plt.pause(0.5)
         #print("Click anywhere to continue")
         #self.fig.waitforbuttonpress()
+        #plt.pause(0.1)
         return regions
 
     def plot_contfit(self,xdata,ydata,contfit,
@@ -177,12 +177,12 @@ class ClickPlot:
         self.ax.set_ylim(ymin,ymax)
         self.fig.tight_layout()
         self.fig.show()
-        plt.pause(0.5)
+        #plt.pause(0.1)
         if not auto:
             print("Click anywhere to continue")
             self.fig.waitforbuttonpress()
 
-    def get_gaussian_estimates(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
+    def get_gauss(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
         """
         Using click events to get the gaussian fit estimates
         """
@@ -235,7 +235,7 @@ class ClickPlot:
         self.fig.canvas.mpl_disconnect(cid)
         return line_start,center_guess,sigma_guess,line_end
 
-    def auto_get_gaussian_estimates(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
+    def auto_get_gauss(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
         """
         Automatically get the gaussian fit estimates
         """
@@ -258,16 +258,16 @@ class ClickPlot:
         self.fig.tight_layout()
         self.fig.show()
         #
-        # Iterate rejecting outliers until no new outliers
+        # Iterate rejecting outliers until no new outliers (>4-sigma)
         # do this on data smoothed by gaussian 3 channels
         #
-        smoy = gaussian_filter(ydata,sigma=5.)
+        smoy = gaussian_filter(ydata,sigma=3.)
         self.ax.plot(xdata,smoy,'g-')
         self.fig.show()
         outliers = np.array([False]*len(xdata))
         while True:
             rms = np.sqrt(np.mean(smoy[~outliers]**2.))
-            new_outliers = np.abs(smoy) > 3.*rms
+            new_outliers = np.abs(smoy) > 4.5*rms
             if np.sum(new_outliers) == np.sum(outliers):
                 break
             outliers = new_outliers
@@ -287,7 +287,7 @@ class ClickPlot:
                 if len(chs) < 4:
                     continue
                 # skip if fewer than 4 (smoothed) values in this region > 5 rms
-                if np.sum(smoy[chs] > 5.*rms) < 4:
+                if np.sum(smoy[chs] > 4.5*rms) < 4:
                     continue
                 # skip if this region is smaller than the saved region
                 if len(chs) < len(line):
@@ -295,19 +295,18 @@ class ClickPlot:
                 line = xdata[chs]
         # no line to fit if line is empty
         if len(line) == 0:
-            plt.pause(0.5)
             #self.fig.waitforbuttonpress()
             return None,None,None,None
-        line_start = np.min(line)
+        line_start = np.min(line)-10.
         self.ax.axvline(line_start)
         line_center = np.mean(line)
         self.ax.axvline(line_center)
-        line_end = np.max(line)
+        line_end = np.max(line)+10.
         self.ax.axvline(line_end)
         line_width = (line_end-line_center)/2.
         self.ax.axvline(line_center+line_width)
         self.fig.show()
-        plt.pause(0.5)
+        #plt.pause(0.1)
         #self.fig.waitforbuttonpress()
         return line_start,line_center,line_width,line_end
 
@@ -341,34 +340,22 @@ class ClickPlot:
         self.fig.tight_layout()
         self.fig.savefig(outfile)
         self.fig.show()
-        plt.pause(0.5)
+        #plt.pause(0.1)
         if not auto:
             print("Click anywhere to continue")
             self.fig.waitforbuttonpress()
 
-def calc_te(imagename,region,fluxtype,freq=None,auto=False):
+def dump_spec(imagename,region,fluxtype):
     """
-    Extract spectrum from region, measure RRL shape and continuum
-    brightness, calculate electron temperature
-
+    Extract spectrum from region. Create's specflux file.
+    
     Inputs:
       imagename = image to analyze
       region = region file
       fluxtype = what type of flux to measure ('flux' or 'mean')
-      freq = if None, get frequency from image header (MHz)
 
     Returns:
-      te = electron temperature (K)
-      e_te = error on electron temperature (K)
-      line_to_cont = line to continuum ratio
-      e_line_to_cont = error
-      line_brightness = line strength (mJy)
-      e_line_brightness = error
-      line_fwhm = line width (km/s)
-      e_line_fwhm = error
-      cont_brightness = continuum brightness (mJy)
-      rms = error (mJy)
-      freq = frequency
+      specdata = numpy array of .specflux file
     """
     #
     # start logger
@@ -380,22 +367,52 @@ def calc_te(imagename,region,fluxtype,freq=None,auto=False):
     logfile = '{0}.{1}.specflux'.format(imagename,region)
     casa.specflux(imagename=imagename,region=region,function=fluxtype,
                   logfile=logfile,overwrite=True)
-    if fluxtype == 'flux':
-        ylabel = 'Flux (mJy)'
-    else:
-        ylabel = 'Flux Density (mJy/beam)'
     #
-    # Import spectrum and plot it
+    # Import spectrum
     #
     try:
         specdata = np.genfromtxt(logfile,comments='#',dtype=None,
                                  names=('channel','npts','freq','velocity','flux'))
+        return specdata
     except:
         # region is all NaNs (i.e. outside of primary beam)
-        return (np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan,
-                np.nan, np.nan, np.nan, np.nan, np.nan)
+        return None
+
+def fit_line(imagename,region,fluxtype,specdata,auto=False):
+    """
+    Fit gaussian to RRL.
+
+    Inputs:
+      imagename = image to analyze
+      region = region file
+      fluxtype = what type of flux to measure ('flux' or 'mean')
+      specdata = output from dump_spec
+      auto = if True, automatically fit spectrum, but ask if fit
+             looks good and manually re-fit if not.
+
+    Returns:
+      line_brightness = line strength (mJy or mJy/beam)
+      e_line_brightness = error (mJy or mJy/beam)
+      line_fwhm = line width (km/s)
+      e_line_fwhm = error
+      line_center = line center velocity (km/s)
+      e_line_center = error (km/s)
+      cont_brightness = continuum brightness (mJy or mJy/beam)
+      rms = error (mJy or mJy/beam)
+    """
+    #
+    # start logger
+    #
+    logger = logging.getLogger("main")
+    #
+    # Convert to mJy and make the plot
+    #
     specdata['flux'] = specdata['flux']*1000. # Jy -> mJy
     myplot = ClickPlot(1)
+    if fluxtype=='mean':
+        ylabel = 'Flux Density (mJy/beam)'
+    else:
+        ylabel = 'Flux (mJy)'
     #
     # Remove NaNs (if any)
     #
@@ -406,14 +423,28 @@ def calc_te(imagename,region,fluxtype,freq=None,auto=False):
     # Get line-free regions
     #
     title = '{0}\n{1}'.format(imagename,region)
-    if auto:
-        regions = myplot.auto_get_line_free_regions(specdata_velocity,specdata_flux,
-                                                    xlabel='Velocity (km/s)',ylabel=ylabel,
-                                                    title=title)
-    else:
-        regions = myplot.get_line_free_regions(specdata_velocity,specdata_flux,
-                                               xlabel='Velocity (km/s)',ylabel=ylabel,
-                                               title=title)
+    redo=False
+    while True:
+        if ((not auto) or redo):
+            regions = myplot.line_free(specdata_velocity,specdata_flux,
+                                       xlabel='Velocity (km/s)',ylabel=ylabel,
+                                       title=title)
+        else:
+            regions = myplot.auto_line_free(specdata_velocity,specdata_flux,
+                                            xlabel='Velocity (km/s)',ylabel=ylabel,
+                                            title=title)
+        """
+        inp = ''
+        while inp.lower() not in ['y','n','s']:
+            inp = raw_input("Re-do manually (y/n) or skip this line (s)?")
+        if inp == 's':
+            return (None, None, None, None, None, None, None, None)
+        if inp == 'y':
+            redo = True
+        else:
+            break
+        """
+        break
     #
     # Extract line free velocity and flux
     #
@@ -444,50 +475,22 @@ def calc_te(imagename,region,fluxtype,freq=None,auto=False):
     #
     rms = np.sqrt(np.mean(line_free_flux_contsub**2.))
     #
-    # Re-plot spectrum, get Gaussian fit estimates
+    # Re-plot spectrum, get Gaussian fit estimates, fit Gaussian
     #
-    if auto:
-        line_start,center_guess,sigma_guess,line_end = \
-        myplot.auto_get_gaussian_estimates(specdata_velocity,flux_contsub,
-                                           xlabel='Velocity (km/s)',ylabel=ylabel,title=title)
-    else:
-        line_start,center_guess,sigma_guess,line_end = \
-        myplot.get_gaussian_estimates(specdata_velocity,flux_contsub,
-                                      xlabel='Velocity (km/s)',ylabel=ylabel,title=title)
-    if None in [line_start,center_guess,sigma_guess,line_end]:
-        line_brightness = np.nan
-        e_line_brightness = np.nan
-        line_center = np.nan
-        e_line_center = np.nan
-        line_sigma = np.nan
-        e_line_sigma = np.nan
-        line_fwhm = np.nan
-        e_line_fwhm = np.nan
-    else:
-        center_idx = np.argmin(np.abs(specdata_velocity-center_guess))
-        amp_guess = flux_contsub[center_idx]
-        #
-        # Extract line velocity and fluxes
-        #
-        line_mask = (specdata_velocity>line_start)&(specdata_velocity<line_end)
-        line_flux = flux_contsub[line_mask]
-        line_velocity = specdata_velocity[line_mask]
-        #
-        # Fit gaussian to data
-        #
-        try:
-            popt,pcov = curve_fit(gaussian,line_velocity,line_flux,
-                                  p0=(amp_guess,center_guess,sigma_guess),
-                                  sigma=np.ones(line_flux.size)*rms)
-            line_brightness = popt[0]
-            e_line_brightness = np.sqrt(pcov[0][0])
-            line_center = popt[1]
-            e_line_center = np.sqrt(pcov[1][1])
-            line_sigma = np.abs(popt[2])
-            e_line_sigma = np.sqrt(np.abs(pcov[2][2]))
-            line_fwhm = 2.*np.sqrt(2.*np.log(2.))*line_sigma
-            e_line_fwhm = 2.*np.sqrt(2.*np.log(2.))*e_line_sigma
-        except:
+    redo = False
+    while True:
+        if ((not auto) or redo):
+            line_start,center_guess,sigma_guess,line_end = \
+            myplot.get_gauss(specdata_velocity,flux_contsub,
+                             xlabel='Velocity (km/s)',ylabel=ylabel,
+                             title=title)
+        else: 
+            line_start,center_guess,sigma_guess,line_end = \
+            myplot.auto_get_gauss(specdata_velocity,flux_contsub,
+                                  xlabel='Velocity (km/s)',
+                                  ylabel=ylabel,title=title)
+        if None in [line_start,center_guess,sigma_guess,line_end]:
+            # No line to fit
             line_brightness = np.nan
             e_line_brightness = np.nan
             line_center = np.nan
@@ -495,19 +498,85 @@ def calc_te(imagename,region,fluxtype,freq=None,auto=False):
             line_sigma = np.nan
             e_line_sigma = np.nan
             line_fwhm = np.nan
-            e_line_fwhm = np.nan            
-    #
-    # Plot fit
-    #
-    outfile='{0}.{1}.spec.pdf'.format(imagename,region)
-    myplot.plot_fit(specdata_velocity,flux_contsub,line_brightness,line_center,line_sigma,
-                    xlabel='Velocity (km/s)',ylabel=ylabel,title=title,
-                    outfile=outfile,auto=auto)
-    #
-    # Calculate electron temperature
-    #
-    if freq is None:
-        freq = np.mean(specdata['freq'])
+            e_line_fwhm = np.nan
+        else:
+            center_idx = np.argmin(np.abs(specdata_velocity-center_guess))
+            amp_guess = flux_contsub[center_idx]
+            #
+            # Extract line velocity and fluxes
+            #
+            line_mask = (specdata_velocity>line_start)&(specdata_velocity<line_end)
+            line_flux = flux_contsub[line_mask]
+            line_velocity = specdata_velocity[line_mask]
+            #
+            # Fit gaussian to data
+            #
+            try:
+                popt,pcov = curve_fit(gaussian,line_velocity,line_flux,
+                                      p0=(amp_guess,center_guess,sigma_guess),
+                                      sigma=np.ones(line_flux.size)*rms)
+                line_brightness = popt[0]
+                e_line_brightness = np.sqrt(pcov[0][0])
+                line_center = popt[1]
+                e_line_center = np.sqrt(pcov[1][1])
+                line_sigma = np.abs(popt[2])
+                e_line_sigma = np.sqrt(np.abs(pcov[2][2]))
+                line_fwhm = 2.*np.sqrt(2.*np.log(2.))*line_sigma
+                e_line_fwhm = 2.*np.sqrt(2.*np.log(2.))*e_line_sigma
+            except:
+                # Fit failed
+                line_brightness = np.nan
+                e_line_brightness = np.nan
+                line_center = np.nan
+                e_line_center = np.nan
+                line_sigma = np.nan
+                e_line_sigma = np.nan
+                line_fwhm = np.nan
+                e_line_fwhm = np.nan            
+        #
+        # Plot fit
+        #
+        outfile='{0}.{1}.spec.pdf'.format(imagename,region)
+        myplot.plot_fit(specdata_velocity,flux_contsub,line_brightness,line_center,line_sigma,
+                        xlabel='Velocity (km/s)',ylabel=ylabel,title=title,
+                        outfile=outfile,auto=auto)
+        """
+        inp = ''
+        while inp.lower() not in ['y','n','s']:
+            inp = raw_input('Re-do manually (y/n) or skip this line (s)?')
+        if inp == 's':
+            return (None, None, None, None, None, None, None, None)
+        if inp == 'y':
+            redo = True
+        else:
+            break
+        """
+        break
+    return (line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
+            line_center, e_line_center, cont_brightness, rms)
+
+def calc_te(line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
+            line_center, e_line_center, cont_brightness, rms, freq):
+    """
+    Calculate electron temperature
+
+    Inputs:
+        line_brightness
+        e_line_brightness
+        line_fwhm
+        e_line_fwhm
+        line_center
+        e_line_center
+        cont_brightness
+        rms
+        freq
+
+    Returns:
+        line_to_cont
+        e_line_to_cont
+        te
+        e_te
+    """
     line_to_cont = line_brightness/cont_brightness
     e_line_to_cont = line_to_cont * np.sqrt(rms**2./cont_brightness**2. + e_line_brightness**2./line_brightness**2.)
     y = 0.08 # Balser 2011 default value
@@ -516,8 +585,7 @@ def calc_te(imagename,region,fluxtype,freq=None,auto=False):
     #
     # Return results
     #
-    return (te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
-            line_center, e_line_center, cont_brightness, rms, freq)
+    return (line_to_cont, e_line_to_cont, te, e_te)
 
 def main(field,region,
          stackedimages=[],stackedlabels=[],stackedfreqs=[],
@@ -527,7 +595,7 @@ def main(field,region,
     """
    Extract spectrum from region in each RRL image, measure continuum
    brightess and fit Gaussian to measure RRL properties. Also fit stacked 
-   line. Compute electron temperature.
+   lines. Compute electron temperature.
 
     Inputs:
       field       = field to analyze
@@ -595,46 +663,91 @@ def main(field,region,
                                  fluxunit,fluxunit,'km/s','km/s',
                                  fluxunit,fluxunit,'','','K','K'))
         #
-        # Compute electron temperature for each individual RRL
-        # 
+        # Fit RRLs
+        #
+        goodplots = []
         for lineid in lineids:
-            #
-            # Generate file names
-            # 
             imagename = '{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype)
-            te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-                line_center,e_line_center,cont_brightness, rms, freq = calc_te(imagename,region,fluxtype, auto=auto)
+            # extract spectrum
+            specdata = dump_spec(imagename,region,fluxtype)
+            if specdata is None:
+                # outside of primary beam
+                continue
+            # fit RRL
+            line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
+              line_center, e_line_center, cont_brightness, rms = \
+              fit_line(imagename,region,fluxtype,specdata,auto=auto)
+            if line_brightness is None:
+                # skipping line
+                continue
+            # calc Te
+            freq = np.mean(specdata['freq'])
+            line_to_cont, e_line_to_cont, elec_temp, e_elec_temp = \
+              calc_te(line_brightness, e_line_brightness, line_fwhm,
+                      e_line_fwhm, line_center, e_line_center,
+                      cont_brightness, rms, freq)
+            #
+            # Check crazy, wonky fits if we're in auto mode
+            #
+            if auto:
+                if line_brightness > 1.e6: # 1000 Jy
+                    continue
+                if line_to_cont > 1:
+                    continue
+            # write line
             f.write(rowfmt.format(lineid, freq,
                                   line_center, e_line_center,
                                   line_brightness, e_line_brightness,
                                   line_fwhm, e_line_fwhm,
                                   cont_brightness, rms,
                                   line_to_cont, e_line_to_cont,
-                                  te, e_te))
+                                  elec_temp, e_elec_temp))
+            goodplots.append('{0}.{1}.channel.{2}.imsmooth.pbcor.{3}.spec.pdf'.format(field,lineid,linetype,region))
         #
-        # Compute electron temperature for stacked line images
+        # Fit stacked RRLs
         #
-        for image,label,freq in zip(stackedimages,stackedlabels,stackedfreqs):
-            te, e_te, line_to_cont, e_line_to_cont, line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-                line_center, e_line_center, cont_brightness, rms, freq = calc_te(image,region,fluxtype,freq=freq, auto=auto)
+        for imagename,label,freq in zip(stackedimages,stackedlabels,stackedfreqs):
+            # extract spectrum
+            specdata = dump_spec(imagename,region,fluxtype)
+            if specdata is None:
+                # outside of primary beam
+                continue
+            # fit RRL
+            line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
+              line_center, e_line_center, cont_brightness, rms = \
+              fit_line(imagename,region,fluxtype,specdata,auto=auto)
+            if line_brightness is None:
+                # skipping line
+                continue
+            # calc Te
+            line_to_cont, e_line_to_cont, elec_temp, e_elec_temp = \
+              calc_te(line_brightness, e_line_brightness, line_fwhm,
+                      e_line_fwhm, line_center, e_line_center,
+                      cont_brightness, rms, np.mean(specdata['freq']))
+            #
+            # Check crazy, wonky fits if we're in auto mode
+            #
+            if auto:
+                if line_brightness < 0. or line_brightness > 1.e6: # 1000 Jy
+                    continue
+                if line_to_cont < 0. or line_to_cont > 1.:
+                    continue
+            # write line
             f.write(rowfmt.format(label, freq,
-                              line_center, e_line_center,
-                              line_brightness, e_line_brightness,
-                              line_fwhm, e_line_fwhm,
-                              cont_brightness, rms,
-                              line_to_cont, e_line_to_cont,
-                              te, e_te))
+                                  line_center, e_line_center,
+                                  line_brightness, e_line_brightness,
+                                  line_fwhm, e_line_fwhm,
+                                  cont_brightness, rms,
+                                  line_to_cont, e_line_to_cont,
+                                  elec_temp, e_elec_temp))
+            goodplots.append('{0}.{1}.spec.pdf'.format(imagename,region))
     #
     # Generate TeX file of all plots
     #
     logger.info("Generating PDF...")
-    plots = ['{0}.{1}.channel.{2}.imsmooth.pbcor.{3}.spec.pdf'.format(field,lineid,linetype,region) for lineid in lineids]
-    plots = plots + ['{0}.{1}.spec.pdf'.format(image,region) for image in stackedimages]
-    # remove plots that don't exist
-    plots = [plot for plot in plots if os.path.exists(plot)]
     # fix filenames so LaTeX doesn't complain
-    plots = ['{'+fn.replace('.pdf','')+'}.pdf' for fn in plots]
-    with open('{0}.spectra.tex'.format(region),'w') as f:
+    plots = ['{'+fn.replace('.pdf','')+'}.pdf' for fn in goodplots]
+    with open('{0}.{1}.spectra.tex'.format(region,linetype),'w') as f:
         f.write(r"\documentclass{article}"+"\n")
         f.write(r"\usepackage{graphicx}"+"\n")
         f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
@@ -651,6 +764,5 @@ def main(field,region,
             f.write(r"\end{figure}"+"\n")
             f.write(r"\clearpage"+"\n")
         f.write(r"\end{document}")
-    os.system('pdflatex -interaction=batchmode {0}.spectra.tex'.format(region))
+    os.system('pdflatex -interaction=batchmode {0}.{1}.spectra.tex'.format(region,linetype))
     logger.info("Done.")
-        
