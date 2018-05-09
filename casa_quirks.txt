@@ -52,3 +52,13 @@ of Googling.
 
 Alright, I got the colorbar working. Solution to beam problem
 was to remove grid. Works for now.
+
+---
+
+March 2018
+
+Matplotlib complains that the TeX cache file is locked when making
+many plots simultaneously. The solution: edit the file
+casa-release-5.0.0-218.el6/lib/python2.7/site-packages/matplotlib/cbook/__init__.py
+and increase the value of retries under the class Locked(). I increased
+it from 50 to 500.
