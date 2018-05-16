@@ -201,7 +201,7 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',cp={},
     logger.info("Performing primary beam correction...")
     spwlist = [int(spw) for spw in my_cont_spws.split(',')]
     weightlist = [1.0 for spw in spwlist]
-    chanlist = ','.join([cp['contpbchan'] for foo in my_cont_spws.split(',')])
+    chanlist = [int(cp['contpbchan']) for foo in my_cont_spws.split(',')]
     casa.widebandpbcor(vis=vis,imagename=imagename,
                        nterms=cp['nterms'],pbmin=cp['pblimit'],threshold='0.1mJy',
                        spwlist=spwlist,weightlist=weightlist,chanlist=chanlist)
@@ -311,7 +311,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',cp={},
     logger.info("Performing primary beam correction...")
     spwlist = [int(spw) for spw in my_cont_spws.split(',')]
     weightlist = [1.0 for spw in spwlist]
-    chanlist = ','.join([cp['contpbchan'] for foo in my_cont_spws.split(',')])
+    chanlist = [int(cp['contpbchan']) for foo in my_cont_spws.split(',')]
     casa.widebandpbcor(vis=vis,imagename=imagename,
                        nterms=cp['nterms'],pbmin=cp['pblimit'],threshold='0.1mJy',
                        spwlist=spwlist,weightlist=weightlist,chanlist=chanlist)
