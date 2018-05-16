@@ -1252,14 +1252,14 @@ def main(field,vis='',spws='',config_file='',
     good_line_spws = []
     for spw in my_line_spws.split(','):
         foo = None
-        foo = visstat(vis=vis,spw=spw)
+        foo = casa.visstat(vis=vis,spw=spw)
         if foo is not None:
             good_line_spws.append(spw)
     my_line_spws = ','.join(good_line_spws)
     good_cont_spws = []
     for spw in my_cont_spws.split(','):
         foo = None
-        foo = visstat(vis=vis,spw=spw)
+        foo = casa.visstat(vis=vis,spw=spw)
         if foo is not None:
             good_cont_spws.append(spw)
     my_cont_spws = ','.join(good_cont_spws)
