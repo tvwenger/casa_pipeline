@@ -1249,6 +1249,7 @@ def main(field,vis='',spws='',config_file='',
     #
     # Determine which spws actually have data
     #
+    logger.info("Checking line spws...")
     good_line_spws = []
     for spw in my_line_spws.split(','):
         foo = None
@@ -1256,6 +1257,8 @@ def main(field,vis='',spws='',config_file='',
         if foo is not None:
             good_line_spws.append(spw)
     my_line_spws = ','.join(good_line_spws)
+    logger.info("Using line spws: {0}".format(my_line_spws))
+    logger.info("Checking cont spws...")
     good_cont_spws = []
     for spw in my_cont_spws.split(','):
         foo = None
@@ -1263,8 +1266,7 @@ def main(field,vis='',spws='',config_file='',
         if foo is not None:
             good_cont_spws.append(spw)
     my_cont_spws = ','.join(good_cont_spws)
-    logger.info("Considering line spws: {0}".format(my_line_spws))
-    logger.info("Considering cont spws: {0}".format(my_cont_spws))
+    logger.info("Using cont spws: {0}".format(my_cont_spws))
     #
     # Re-grid
     #
