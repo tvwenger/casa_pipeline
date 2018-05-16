@@ -75,7 +75,7 @@ def setup(vis='',config=None,uvtaper=False):
     cp["lightniter"] = config.getint("Clean","lightniter")
     cp["maxniter"] = config.getint("Clean","maxniter")
     cp["nrms"] = config.getfloat("Clean","nrms")
-    cp["contpbchan"] = [int(i) for i in config.get("Clean","contpbchan").split(',')]
+    cp["contpbchan"] = config.get("Clean","contpbchan")
     cp["nterms"] = config.getint("Clean","nterms")
     if uvtaper:
         cp["outertaper"] = ["{0}arcsec".format(config.getfloat("Clean","outertaper"))]
