@@ -201,7 +201,7 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',cp={},
     logger.info("Performing primary beam correction...")
     spwlist = [int(spw) for spw in my_cont_spws.split(',')]
     weightlist = [1.0 for spw in spwlist]
-    chanlist = cp['contpbchan']
+    chanlist = ','.join([cp['contpbchan'] for foo in my_cont_spws.split(',')])
     casa.widebandpbcor(vis=vis,imagename=imagename,
                        nterms=cp['nterms'],pbmin=cp['pblimit'],threshold='0.1mJy',
                        spwlist=spwlist,weightlist=weightlist,chanlist=chanlist)
@@ -311,7 +311,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',cp={},
     logger.info("Performing primary beam correction...")
     spwlist = [int(spw) for spw in my_cont_spws.split(',')]
     weightlist = [1.0 for spw in spwlist]
-    chanlist = cp['contpbchan']
+    chanlist = ','.join([cp['contpbchan'] for foo in my_cont_spws.split(',')])
     casa.widebandpbcor(vis=vis,imagename=imagename,
                        nterms=cp['nterms'],pbmin=cp['pblimit'],threshold='0.1mJy',
                        spwlist=spwlist,weightlist=weightlist,chanlist=chanlist)
@@ -1239,14 +1239,32 @@ def main(field,vis='',spws='',config_file='',
     config.read(config_file)
     logger.info("Done.")
     #
-    # initial setup
+    # initial setup, get all line and cont spws
     #
     my_cont_spws,all_line_spws,cp = setup(vis=vis,config=config,uvtaper=uvtaper)
     if spws == '':
         my_line_spws = all_line_spws
     else:
         my_line_spws = spws
+    #
+    # Determine which spws actually have data
+    #
+    good_line_spws = []
+    for spw in my_line_spws.split(','):
+        foo = None
+        foo = visstat(vis=vis,spw=spw)
+        if foo is not None:
+            good_line_spws.append(spw)
+    my_line_spws = ','.join(good_line_spws)
+    good_cont_spws = []
+    for spw in my_cont_spws.split(','):
+        foo = None
+        foo = visstat(vis=vis,spw=spw)
+        if foo is not None:
+            good_cont_spws.append(spw)
+    my_cont_spws = ','.join(good_cont_spws)
     logger.info("Considering line spws: {0}".format(my_line_spws))
+    logger.info("Considering cont spws: {0}".format(my_cont_spws))
     #
     # Re-grid
     #
