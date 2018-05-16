@@ -50,7 +50,8 @@ def setup(config=None):
     logger.info("Found line spws: {0}".format(my_line_spws))
     return (my_cont_spws,my_line_spws)
 
-def combeam_line_spws(field,my_line_spws='',linetype='clean'):
+def combeam_line_spws(field,my_line_spws='',linetype='clean',
+                      overwrite=False):
     """
     Smooth each line spw to common beam within that spw (i.e. if
     beam is varying over frequency within that spw)
@@ -74,13 +75,10 @@ def combeam_line_spws(field,my_line_spws='',linetype='clean'):
             logger.warn("{0} was not found!".format(imagename))
             continue
         outfile='{0}.spw{1}.channel.{2}.combeam.pbcor'.format(field,spw,linetype)
-        if os.path.isdir(outfile):
-            logger.info("{0} exists.".format(outfile))
-            continue
         head = casa.imhead(imagename=imagename)
         if 'perplanebeams' in head.keys():
             casa.imsmooth(imagename=imagename,kernel='commonbeam',
-                          outfile=outfile)
+                          outfile=outfile,overwrite=overwrite)
         else:
             logger.info("Only one beam in image.")
             shutil.copytree(imagename,outfile)
@@ -229,16 +227,26 @@ def stack_line(field,stackedimage,
     #
     # Get lineids
     #
+    images = []
     lineids = []
     for spw in my_line_spws.split(','):
         spw_ind = config.get("Spectral Windows","Line").split(',').index(spw)
-        lineids += [config.get("Clean","lineids").split(',')[spw_ind]]
+        lineid = config.get("Clean","lineids").split(',')[spw_ind]
+        lineids.append(lineid)
+        imagename = '{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype)
+        if not os.path.isdir(imagename):
+            continue
+        images.append(imagename)
     logger.info("Stacking lines {0}".format(lineids))
-    images = ['{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype) for lineid in lineids]
-    ims = ['IM{0}'.format(foo) for foo in range(len(images))]
-    myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
-    casa.immath(imagename=images,outfile=stackedimage,mode='evalexpr',
-                expr=myexp)
+    if overwrite and os.path.isdir(stackedimage):
+        shutil.rmtree(stackedimage)
+    elif os.path.isdir(stackedimage):
+        print("Found {0}".format(stackedimage))
+    else:
+        ims = ['IM{0}'.format(foo) for foo in range(len(images))]
+        myexp =  '({0})/{1}'.format('+'.join(ims),str(float(len(images))))
+        casa.immath(imagename=images,outfile=stackedimage,mode='evalexpr',
+                    expr=myexp)
     casa.exportfits(imagename=stackedimage,fitsimage='{0}.fits'.format(stackedimage),
                     overwrite=True,history=False,velocity=True)
     logger.info("Done!")
@@ -289,7 +297,8 @@ def main(field,stackedspws,stackedimages,
     #
     # smooth line images to common beam
     #
-    combeam_line_spws(field,my_line_spws=my_line_spws,linetype=linetype)
+    combeam_line_spws(field,my_line_spws=my_line_spws,linetype=linetype,
+                      overwrite=overwrite)
     #
     # Smooth all line and continuum images to common beam, rename
     # by lineid

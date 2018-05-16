@@ -631,15 +631,18 @@ def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
     config.read(config_file)
     logger.info("Done.")
     #
-    # Check if we supplied spws
+    # Check if we supplied spws, if not, use all
     #
     if len(spws) == 0:
-        spws = config.get("Spectral Windows","Line").split(',')
-        goodspws = []
-        for spw in spws.split(','):
-            if os.path.isdir('{0}.spw{1}.channel.{2}.pbcor.image'.format(field,spw,linetype)):
-                goodspws.append(spw)
-        spws = goodspws
+        spws = config.get("Spectral Windows","Line")
+    #
+    # Check spws exist
+    #
+    goodspws = []
+    for spw in spws.split(','):
+        if os.path.isdir('{0}.spw{1}.channel.{2}.pbcor.image'.format(field,spw,linetype)):
+            goodspws.append(spw)
+    spws = ','.join(goodspws)
     #
     # Get lineid, line frequency for each spw
     #

@@ -629,15 +629,18 @@ def main(field,region,
     config.read(config_file)
     logger.info("Done.")
     #
-    # Check if we supplied lineids
+    # Check if we supplied lineids, if not, use all
     #
     if len(lineids) == 0:
         lineids = config.get("Clean","lineids").split(',')
-        goodlineids = []
-        for lineid in lineids:
-            if os.path.isdir('{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype)):
-                goodlineids.append(lineid)
-        lineids = goodlineids
+    #
+    # Check images exist
+    # 
+    goodlineids = []
+    for lineid in lineids:
+        if os.path.isdir('{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype)):
+            goodlineids.append(lineid)
+    lineids = goodlineids
     #
     # Set-up file
     #

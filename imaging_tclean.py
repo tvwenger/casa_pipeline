@@ -1020,7 +1020,10 @@ def lineplot(field,line_spws='',uvtaper=False,cp={}):
     goodplots = []
     for spw in line_spws.split(','):
         # check that this spectral window exists
-        if not os.path.exists('{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw)):
+        fname = '{0}.spw{1}.channel.clean.image.fits'.format(field,spw)
+        if uvtaper:
+            fname = '{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw)
+        if not os.path.exists(fname):
             continue
         #
         # Loop over all plot filenames
@@ -1140,7 +1143,10 @@ def lineplot(field,line_spws='',uvtaper=False,cp={}):
         #
         # Generate spectrum
         #
-        fitsfile = '{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw)
+        if uvtaper:
+            fitsfile = '{0}.spw{1}.channel.clean.uvtaper.image.fits'.format(field,spw)
+        else:
+            fitsfile = '{0}.spw{1}.channel.clean.image.fits'.format(field,spw)
         hdu = fits.open(fitsfile)[0]
         spec = hdu.data[0,:,center_x,center_y]
         velo = (np.arange(len(spec))*hdu.header['CDELT3'] + hdu.header['CRVAL3'])/1000.
@@ -1156,7 +1162,10 @@ def lineplot(field,line_spws='',uvtaper=False,cp={}):
         ax.set_xlim(np.min(velo),np.max(velo))
         ybuff = 0.1*(np.max(spec)-np.min(spec))
         ax.set_ylim(np.min(spec)-ybuff,np.max(spec)+ybuff)
-        ax.set_title('{0} - spw {1} - Center'.format(field,spw))
+        if uvtaper:
+            ax.set_title('{0} - spw {1} - UVTap/Center'.format(field,spw))
+        else:
+            ax.set_title('{0} - spw {1} - Center'.format(field,spw))
         ax.grid(False)
         fig.tight_layout()
         fig.savefig(fitsfile.replace('.fits','.spec.pdf'),

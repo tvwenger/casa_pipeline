@@ -9,13 +9,28 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
-from matplotlib.patches import Ellipse
 from matplotlib.colors import LogNorm, PowerNorm
 from matplotlib.patches import Ellipse
+from matplotlib.legend_handler import HandlerPatch
 
 __VERSION__ = "1.0"
 
-def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.):
+class HandlerEllipse(HandlerPatch):
+    """
+    This adds the ability to create ellipses within a matplotlib
+    legend
+    """
+    def create_artists(self, legend, orig_handle,
+                       xdescent, ydescent, width, height, fontsize, trans):
+        center = 0.5 * width - 0.5 * xdescent, 0.5 * height - 0.5 * ydescent
+        p = Ellipse(xy=center, width=height + xdescent,
+                    height=height + ydescent, fill=False)
+        self.update_prop(p, orig_handle, legend)
+        p.set_transform(trans)
+        return [p]
+
+def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
+         wisefile=None,sigma=0.,levels=[5.,10.,20.,50.,100.]):
     """
     Plot some regions on top of some images with specified colors,
     and create PDF.
@@ -25,14 +40,20 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.):
       regions = list of region filenames to plot
       colors = what colors to plot each region
       labels = label for regions
-      shrdsdata = if not None, path to SHRDS candidates data file
-                 This will plot the WISE regions on top
+      shrdsfile = if not None, path to SHRDS candidates data file
+                 This will plot the SHRDS candidate regions on top
       fluxlimit = only plot WISE regions brighter than this peak
                   continuum flux density (mJy/beam)
+      wisefile = if not None, path to WISE positions data file
+                 This will plot the WISE regions on top
+      sigma = if > 0., will plot colormap with contours at
+              levels * sigma
+      levels = list of contour levels
 
     Returns:
       Nothing
     """
+    levels = np.array(levels)
     outimages = []
     for image in images:
         #
@@ -48,13 +69,22 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.):
         wcs_celest = wcs.sub(['celestial'])
         ax = plt.subplot(projection=wcs_celest)
         ax.set_title(image.replace('.fits',''))
-        cax = ax.imshow(hdu.data[0,0],
-                        origin='lower',interpolation='none',cmap='binary',
-                        norm=LogNorm(vmin=0.001))
+        # image
+        cax = ax.imshow(hdu.data[0,0],origin='lower',
+                        interpolation='none',cmap='viridis')
+        # contours
+        if sigma > 0.:
+            con = ax.contour(hdu.data[0,0],origin='lower',
+                             levels=levels*sigma,colors='k',linewidths=0.2)
         xlen,ylen = hdu.data[0,0].shape
         ax.coords[0].set_major_formatter('hh:mm:ss')
         ax.set_xlabel('RA (J2000)')
         ax.set_ylabel('Declination (J2000)')
+        #
+        # Plot colorbar
+        #
+        cbar = fig.colorbar(cax,fraction=0.046,pad=0.04)
+        cbar.set_label('Flux Density (Jy/beam)')
         #
         # Plot beam, if it is defined
         #
@@ -68,11 +98,6 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.):
                             fill=True,zorder=10,hatch='///',
                             edgecolor='black',facecolor='white')
             ax.add_patch(ellipse)
-        #
-        # Plot colorbar
-        #
-        cbar = fig.colorbar(cax,fraction=0.046,pad=0.04)
-        cbar.set_label('Flux Density (Jy/beam)')
         #
         # Plot regions
         #
@@ -117,12 +142,18 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.):
                     decs.append(decs[0])
                     ax.plot(RAs,decs,marker=None,linestyle='solid',color=col,
                             transform=ax.get_transform('world'),
-                            label=lab)
+                            label=lab,zorder=110)
         #
-        # Plot WISE regions
+        # Add regions legend
+        #
+        if len(regions) > 0:
+            region_legend = plt.legend(loc='upper right',fontsize=10)
+            ax.add_artist(region_legend)
+        #
+        # Plot SHRDS candidate regions
         #
         if shrdsfile is not None:
-            shrdsdata = np.genfromtxt(shrdsfile,dtype=None,delimiter=',',
+            shrdsdata = np.genfromtxt(shrdsfile,dtype=None,delimiter=',',encoding='UTF-8',
                                       usecols=(0,1,4,5,6,7),skip_header=1,
                                       names=('name','GName','RA','Dec','diameter','flux'))
             RA = np.zeros(len(shrdsdata))
@@ -155,19 +186,57 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.):
                 xpos,ypos = wcs_celest.wcs_world2pix(R,D,1)
                 size = dat['diameter']/3600./pixsize
                 ell = Ellipse((xpos,ypos),size,size,
-                               color='m',fill=False,linestyle='dashed')
+                               color='m',fill=False,linestyle='dashed',zorder=105)
                 ax.add_patch(ell)
-                ax.text(R,D,dat['name']+'\n'+dat['GName'],transform=ax.get_transform('world'),fontsize=6)
+                ax.text(R,D,dat['GName'],transform=ax.get_transform('world'),fontsize=4,zorder=105)
+        #
+        # Plot WISE regions
+        #
+        if wisefile is not None:
+            wisedata = np.genfromtxt(wisefile,dtype=None,names=True,encoding='UTF-8')
+            # limit only to regions with centers within image
+            corners = wcs_celest.calc_footprint()
+            min_RA = np.min(corners[:,0])
+            max_RA = np.max(corners[:,0])
+            RA_range = max_RA - min_RA
+            min_RA += 0.25 * RA_range
+            max_RA -= 0.25 * RA_range
+            min_Dec = np.min(corners[:,1])
+            max_Dec = np.max(corners[:,1])
+            Dec_range = max_Dec - min_Dec
+            min_Dec += 0.25 * Dec_range
+            max_Dec -= 0.25 * Dec_range
+            good = (min_RA < wisedata['RA'])&(wisedata['RA'] < max_RA)&(min_Dec < wisedata['Dec'])&(wisedata['Dec'] < max_Dec)
+            # plot them
+            wisedata = wisedata[good]
+            for dat in wisedata:
+                xpos,ypos = wcs_celest.wcs_world2pix(dat['RA'],dat['Dec'],1)
+                size = dat['Size']*2./3600./pixsize
+                ell = Ellipse((xpos,ypos),size,size,
+                               color='y',fill=False,linestyle='dashed',zorder=100)
+                ax.add_patch(ell)
+                ax.text(dat['RA'],dat['Dec'],dat['GName'],transform=ax.get_transform('world'),fontsize=4,zorder=100)
+        #
+        # Add WISE+SHRDS legend
+        #
+        if shrdsfile is not None or wisefile is not None:
+            patches = []
+            if shrdsfile is not None:
+                ell = Ellipse((0,0),0.1,0.1,color='m',fill=False,
+                              linestyle='dashed',label='SHRDS Candidates')
+                patches.append(ell)
+            if wisefile is not None:
+                ell = Ellipse((0,0),0.1,0.1,color='y',fill=False,
+                              linestyle='dashed',label='WISE Catalog')
+                patches.append(ell)
+            wise_legend = plt.legend(handles=patches,loc='lower right',fontsize=10,
+                                     handler_map={Ellipse: HandlerEllipse()})
+            ax.add_artist(wise_legend)
         #
         # Re-scale to fit, then save
         #
-        ax.legend(loc='best',fontsize=10)
         fig.savefig(image.replace('.fits','.reg.pdf'),
                     bbox_inches='tight')
         plt.close(fig)
         plt.ion()
         outimages.append(image.replace('.fits','.reg.pdf'))
-
-    
-    
-        
