@@ -1,7 +1,12 @@
 """
-process_spectra.py
+process_spectra_peak.py
 CASA Data Reduction Pipeline - Analyze spectra
-Trey V. Wenger Feb 2018 - V1.0
+This differs from process_spectra.py in these ways:
+1. We are not uv-tapering and stacking images, instead we are extracting
+spectra from the un-tapered images.
+2. Since we are not stacking lines, they are not renamed to lineid.
+3. 
+Trey V. Wenger April 2018 - V1.0
 """
 
 import __main__ as casa # import casa namespace
@@ -378,7 +383,7 @@ def dump_spec(imagename,region,fluxtype):
         # region is all NaNs (i.e. outside of primary beam)
         return None
 
-def fit_line(imagename,region,fluxtype,specdata,auto=False):
+def fit_line(imagename,region,fluxtype,specdata,outfile,auto=False):
     """
     Fit gaussian to RRL.
 
@@ -536,7 +541,6 @@ def fit_line(imagename,region,fluxtype,specdata,auto=False):
         #
         # Plot fit
         #
-        outfile='{0}.{1}.spec.pdf'.format(imagename,region)
         myplot.plot_fit(specdata_velocity,flux_contsub,line_brightness,line_center,line_sigma,
                         xlabel='Velocity (km/s)',ylabel=ylabel,title=title,
                         outfile=outfile,auto=auto)
@@ -554,6 +558,40 @@ def fit_line(imagename,region,fluxtype,specdata,auto=False):
         break
     return (line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
             line_center, e_line_center, cont_brightness, rms)
+
+def calc_rms(ydata):
+    """
+    Automatically find line-free regions to calculate RMS.
+
+    Inputs:
+      data = array of data
+
+    Returns:
+      rms = rms of line-free regions of data
+    """
+    xdata = np.arange(len(ydata))
+    #
+    # Get line-free channels by fitting a 3rd order polynomial baseline and
+    # rejecting outliers until no new outliers
+    # do this on data smoothed by gaussian 3 channels
+    #
+    smoy = gaussian_filter(ydata,sigma=5.)
+    outliers = np.array([False]*len(xdata))
+    while True:
+        pfit = np.polyfit(xdata[~outliers],smoy[~outliers],3)
+        yfit = np.poly1d(pfit)
+        new_smoy = smoy - yfit(xdata)
+        rms = np.sqrt(np.mean(new_smoy[~outliers]**2.))
+        new_outliers = np.abs(new_smoy) > 3.*rms
+        if np.sum(new_outliers) == np.sum(outliers):
+            break
+        outliers = new_outliers
+    #
+    # line-free channels are those without outliers
+    # (RMS == STD if mean is zero, which it may not be, so we use STD)
+    #
+    rms = np.std(ydata[~outliers])
+    return rms
 
 def calc_te(line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
             line_center, e_line_center, cont_brightness, rms, freq):
@@ -587,10 +625,8 @@ def calc_te(line_brightness, e_line_brightness, line_fwhm, e_line_fwhm,
     #
     return (line_to_cont, e_line_to_cont, te, e_te)
 
-def main(field,region,
-         stackedimages=[],stackedlabels=[],stackedfreqs=[],
-         fluxtype='flux',
-         lineids=[],linetype='dirty',
+def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
+         fluxtype='flux',linetype='dirty',weight=False,
          outfile='electron_temps.txt',config_file=None,auto=False):
     """
    Extract spectrum from region in each RRL image, measure continuum
@@ -600,11 +636,12 @@ def main(field,region,
     Inputs:
       field       = field to analyze
       region = filename of region where to extract spectrum
-      stackedimagelabels = what to call the stacked image data in outfile
-      stackedimages = filenames of stacked images
+      spws = spws to analyze
+      stackedspws = list of comma separated string of spws to stack
+      stackedlabels = labels for stacked lines
       fluxtype = what type of flux to measure ('flux' or 'mean')
-      lineids     = lines to stack, if empty all lines
       linetype = 'clean' or 'dirty'
+      weight = if True, weight the stacked spectra by continuum/rms^2
       outfile = where the results go
       config_file = configuration file
 
@@ -629,48 +666,58 @@ def main(field,region,
     config.read(config_file)
     logger.info("Done.")
     #
-    # Check if we supplied lineids, if not, use all
+    # Check if we supplied spws, if not, use all
     #
-    if len(lineids) == 0:
-        lineids = config.get("Clean","lineids").split(',')
+    if len(spws) == 0:
+        spws = config.get("Spectral Windows","Line")
     #
-    # Check images exist
-    # 
-    goodlineids = []
-    for lineid in lineids:
-        if os.path.isdir('{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype)):
-            goodlineids.append(lineid)
-    lineids = goodlineids
+    # Check spws exist
+    #
+    goodspws = []
+    for spw in spws.split(','):
+        if os.path.isdir('{0}.spw{1}.channel.{2}.pbcor.image'.format(field,spw,linetype)):
+            goodspws.append(spw)
+    spws = ','.join(goodspws)
+    #
+    # Get lineid, line frequency for each spw
+    #
+    alllinespws = config.get("Spectral Windows","Line").split(',')
+    alllineids = config.get("Clean","lineids").split(',')
+    allrestfreqs = config.get("Clean","restfreqs").split(',')
+    lineids = [alllineids[alllinespws.index(spw)] for spw in spws.split(',')]
+    restfreqs = [float(allrestfreqs[alllinespws.index(spw)].replace('MHz','')) for spw in spws.split(',')]
     #
     # Set-up file
     #
     with open(outfile,'w') as f:
-        # 0       1           2      3      4        5        6     7      8        9        10        11          12        13          
-        # lineid  frequency   velo   e_velo line     e_line   fwhm  e_fwhm cont     rms      line2cont e_line2cont elec_temp e_elec_temp 
+        # 0       1           2      3      4        5        6     7      8        9        10        11          12        13          14
+        # lineid  frequency   velo   e_velo line     e_line   fwhm  e_fwhm cont     rms      line2cont e_line2cont elec_temp e_elec_temp linesnr
         # #       MHz         km/s   km/s   mJy/beam mJy/beam km/s  km/s   mJy/beam mJy/beam                       K         K           
-        # H122a   9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0      
-        # stacked 9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0      
-        # 1234567 12345678902 123456 123456 12345678 12345678 12345 123456 12345678 12345678 123456789 12345678901 123456789 12345678901 
+        # H122a   9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0      10000.0
+        # stacked 9494.152594 -100.0 50.0   1000.0   100.0    100.0 10.0   1000.0   100.0    0.050     0.001       10000.0   1000.0      10000.0
+        # 1234567 12345678902 123456 123456 12345678 12345678 12345 123456 12345678 12345678 123456789 12345678901 123456789 12345678901 1234567
         #
-        headerfmt = '{0:12} {1:12} {2:6} {3:6} {4:8} {5:8} {6:5} {7:6} {8:8} {9:8} {10:9} {11:11} {12:9} {13:11}\n'
-        rowfmt = '{0:12} {1:12.6f} {2:6.1f} {3:6.1f} {4:8.1f} {5:8.1f} {6:5.1f} {7:6.1f} {8:8.1f} {9:8.1f} {10:9.3f} {11:11.3f} {12:9.1f} {13:11.1f}\n'
+        headerfmt = '{0:12} {1:12} {2:6} {3:6} {4:8} {5:8} {6:5} {7:6} {8:8} {9:8} {10:9} {11:11} {12:9} {13:11} {14:7}\n'
+        rowfmt = '{0:12} {1:12.6f} {2:6.1f} {3:6.1f} {4:8.1f} {5:8.1f} {6:5.1f} {7:6.1f} {8:8.1f} {9:8.1f} {10:9.3f} {11:11.3f} {12:9.1f} {13:11.1f} {14:7.1f}\n'
         f.write(headerfmt.format('lineid','frequency','velo','e_velo',
                                  'line','e_line','fwhm','e_fwhm',
                                  'cont','rms','line2cont','e_line2cont',
-                                 'elec_temp','e_elec_temp'))
+                                 'elec_temp','e_elec_temp','linesnr'))
         if fluxtype == 'flux':
             fluxunit = 'mJy'
         else:
             fluxunit = 'mJy/beam'
         f.write(headerfmt.format('#','MHz','km/s','km/s',
                                  fluxunit,fluxunit,'km/s','km/s',
-                                 fluxunit,fluxunit,'','','K','K'))
+                                 fluxunit,fluxunit,'','','K','K',''))
         #
         # Fit RRLs
         #
         goodplots = []
-        for lineid in lineids:
-            imagename = '{0}.{1}.channel.{2}.imsmooth.pbcor'.format(field,lineid,linetype)
+        for spw,lineid,restfreq in zip(spws.split(','),lineids,restfreqs):
+            imagename = '{0}.spw{1}.channel.{2}.pbcor.image'.format(field,spw,linetype)
+            imagetitle = '{0}.{1}.channel.{2}.pbcor.image'.format(field,lineid,linetype)
+            outfile = '{0}.{1}.channel.{2}.pbcor.image.{3}.spec.pdf'.format(field,lineid,linetype,region)
             # extract spectrum
             specdata = dump_spec(imagename,region,fluxtype)
             if specdata is None:
@@ -679,54 +726,17 @@ def main(field,region,
             # fit RRL
             line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
               line_center, e_line_center, cont_brightness, rms = \
-              fit_line(imagename,region,fluxtype,specdata,auto=auto)
+              fit_line(imagetitle,region,fluxtype,specdata,outfile,auto=auto)
             if line_brightness is None:
                 # skipping line
                 continue
-            # calc Te
-            freq = np.mean(specdata['freq'])
-            line_to_cont, e_line_to_cont, elec_temp, e_elec_temp = \
-              calc_te(line_brightness, e_line_brightness, line_fwhm,
-                      e_line_fwhm, line_center, e_line_center,
-                      cont_brightness, rms, freq)
-            #
-            # Check crazy, wonky fits if we're in auto mode
-            #
-            if auto:
-                if line_brightness > 1.e6: # 1000 Jy
-                    continue
-                if line_to_cont > 1:
-                    continue
-            # write line
-            f.write(rowfmt.format(lineid, freq,
-                                  line_center, e_line_center,
-                                  line_brightness, e_line_brightness,
-                                  line_fwhm, e_line_fwhm,
-                                  cont_brightness, rms,
-                                  line_to_cont, e_line_to_cont,
-                                  elec_temp, e_elec_temp))
-            goodplots.append('{0}.{1}.channel.{2}.imsmooth.pbcor.{3}.spec.pdf'.format(field,lineid,linetype,region))
-        #
-        # Fit stacked RRLs
-        #
-        for imagename,label,freq in zip(stackedimages,stackedlabels,stackedfreqs):
-            # extract spectrum
-            specdata = dump_spec(imagename,region,fluxtype)
-            if specdata is None:
-                # outside of primary beam
-                continue
-            # fit RRL
-            line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
-              line_center, e_line_center, cont_brightness, rms = \
-              fit_line(imagename,region,fluxtype,specdata,auto=auto)
-            if line_brightness is None:
-                # skipping line
-                continue
+            channel_width = config.getfloat("Clean","chanwidth")
+            linesnr = 0.7*line_brightness/rms * (line_fwhm/channel_width)**0.5
             # calc Te
             line_to_cont, e_line_to_cont, elec_temp, e_elec_temp = \
               calc_te(line_brightness, e_line_brightness, line_fwhm,
                       e_line_fwhm, line_center, e_line_center,
-                      cont_brightness, rms, np.mean(specdata['freq']))
+                      cont_brightness, rms, restfreq)
             #
             # Check crazy, wonky fits if we're in auto mode
             #
@@ -735,22 +745,97 @@ def main(field,region,
                     continue
                 if line_to_cont < 0. or line_to_cont > 1.:
                     continue
+                if np.isinf(e_line_fwhm) or np.isinf(e_line_center):
+                    continue
             # write line
-            f.write(rowfmt.format(label, freq,
+            f.write(rowfmt.format(lineid, restfreq,
                                   line_center, e_line_center,
                                   line_brightness, e_line_brightness,
                                   line_fwhm, e_line_fwhm,
                                   cont_brightness, rms,
                                   line_to_cont, e_line_to_cont,
-                                  elec_temp, e_elec_temp))
-            goodplots.append('{0}.{1}.spec.pdf'.format(imagename,region))
+                                  elec_temp, e_elec_temp, linesnr))
+            goodplots.append(outfile)
+        #
+        # Fit stacked RRLs
+        #
+        for my_stackedspws, stackedlabel in zip(stackedspws,stackedlabels):
+            # extract spectrum from each image
+            specdatas = []
+            specfreqs = []
+            weights = []
+            avgspecdata = None
+            for spw in my_stackedspws.split(','):
+                imagename = '{0}.spw{1}.channel.{2}.pbcor.image'.format(field,spw,linetype)
+                specdata = dump_spec(imagename,region,fluxtype)
+                if specdata is None:
+                    # outside of primary beam
+                    continue
+                avgspecdata = specdata
+                specdatas.append(specdata['flux'])
+                specfreqs.append(np.mean(specdata['freq']))
+                # estimate rms
+                if weight:
+                    rms = calc_rms(specdata['flux'])
+                    weights.append(np.mean(specdata['flux'])/rms**2.)
+            specdatas = np.array(specdatas)
+            specfreqs = np.array(specfreqs)
+            weights = np.array(weights)
+            # average spectrum
+            if weight:
+                specaverage = np.average(specdatas,axis=0,weights=weights)
+                stackedrestfreq = np.average(specfreqs,weights=weights)
+                outfile = '{0}.{1}.channel.{2}.pbcor.image.{3}.wt.spec.pdf'.format(field,stackedlabel,linetype,region)
+                imagetitle = '{0}.{1}.channel.{2}.pbcor.image (wt)'.format(field,stackedlabel,linetype)
+            else:
+                specaverage = np.mean(specdatas,axis=0)
+                stackedrestfreq = np.mean(specfreqs)
+                outfile = '{0}.{1}.channel.{2}.pbcor.image.{3}.spec.pdf'.format(field,stackedlabel,linetype,region)
+                imagetitle = '{0}.{1}.channel.{2}.pbcor.image'.format(field,stackedlabel,linetype)
+            avgspecdata['flux'] = specaverage
+            # fit RRL
+            line_brightness, e_line_brightness, line_fwhm, e_line_fwhm, \
+              line_center, e_line_center, cont_brightness, rms = \
+              fit_line(imagetitle,region,fluxtype,avgspecdata,outfile,auto=auto)
+            if line_brightness is None:
+                # skipping line
+                continue
+            channel_width = config.getfloat("Clean","chanwidth")
+            linesnr = 0.7*line_brightness/rms * (line_fwhm/channel_width)**0.5
+            # calc Te
+            line_to_cont, e_line_to_cont, elec_temp, e_elec_temp = \
+              calc_te(line_brightness, e_line_brightness, line_fwhm,
+                      e_line_fwhm, line_center, e_line_center,
+                      cont_brightness, rms, stackedrestfreq)
+            #
+            # Check crazy, wonky fits if we're in auto mode
+            #
+            if auto:
+                if line_brightness < 0. or line_brightness > 1.e6: # 1000 Jy
+                    continue
+                if line_to_cont < 0. or line_to_cont > 1.:
+                    continue
+                if np.isinf(e_line_fwhm) or np.isinf(e_line_center):
+                    continue
+            # write line
+            f.write(rowfmt.format(stackedlabel, stackedrestfreq,
+                                  line_center, e_line_center,
+                                  line_brightness, e_line_brightness,
+                                  line_fwhm, e_line_fwhm,
+                                  cont_brightness, rms,
+                                  line_to_cont, e_line_to_cont,
+                                  elec_temp, e_elec_temp, linesnr))
+            goodplots.append(outfile)
     #
     # Generate TeX file of all plots
     #
     logger.info("Generating PDF...")
     # fix filenames so LaTeX doesn't complain
     plots = ['{'+fn.replace('.pdf','')+'}.pdf' for fn in goodplots]
-    with open('{0}.{1}.spectra.tex'.format(region,linetype),'w') as f:
+    fname = '{0}.{1}.spectra.tex'.format(region,linetype)
+    if weight:
+        fname = '{0}.{1}.wt.spectra.tex'.format(region,linetype)
+    with open(fname,'w') as f:
         f.write(r"\documentclass{article}"+"\n")
         f.write(r"\usepackage{graphicx}"+"\n")
         f.write(r"\usepackage[margin=0.1cm]{geometry}"+"\n")
@@ -767,5 +852,6 @@ def main(field,region,
             f.write(r"\end{figure}"+"\n")
             f.write(r"\clearpage"+"\n")
         f.write(r"\end{document}")
-    os.system('pdflatex -interaction=batchmode {0}.{1}.spectra.tex'.format(region,linetype))
+    os.system('pdflatex -interaction=batchmode {0}'.format(fname))
     logger.info("Done.")
+        
