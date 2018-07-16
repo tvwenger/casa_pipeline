@@ -7,6 +7,7 @@ Trey V. Wenger September 2017 - V1.0
 import __main__ as casa
 import os
 import time
+import numpy as np
 import logging
 import logging.config
 import ConfigParser
@@ -29,9 +30,8 @@ def setup(vis='',config=None):
       (my_cont_spws,my_line_spws,chan_offset,chan_width)
       my_cont_spws    = comma-separated string of continuum spws
       my_line_spws    = comma-separated string of line spws
-      chan_offset     = list of channel offsets
-                        of spectral lines relative to highest-freq
-                        line spw
+      chan_offset     = array of channel offsets
+                        of spectral lines relative to highest line spw
       chan_width      = total channel width to un-flag around line
                         center
     """
@@ -55,7 +55,7 @@ def setup(vis='',config=None):
     #
     # Get Unflag parameters from configuration file
     #
-    chan_offset = config.get("Unflag","chan_offset").split(',')
+    chan_offset = np.array([int(c) for c in config.get("Unflag","chan_offset").split(',')])
     chan_width = config.getint("Unflag","chan_width")
     return (my_cont_spws,my_line_spws,chan_offset,chan_width)
 
@@ -94,11 +94,21 @@ def main(field,vis='',config_file=''):
     my_cont_spws,my_line_spws,chan_offset,chan_width = \
       setup(vis=vis,config=config)
     #
+    # Get spw we are looking at
+    #
+    print("What spectral window are you using to measure the line channel?")
+    spw = raw_input("> ")
+    spw_ind = my_line_spws.split(',').index(spw)
+    #
     # Get channel of spectral line in highest-freq spectral window
     #
-    print("What is the channel of the spectral line center in the"
-          "highest frequency spectral line spectral window?")
-    answer = int(raw_input("> "))
+    print("What is the channel of the spectral line center in that spectral wnidow?")
+    chan = int(raw_input("> "))
+    #
+    # Chan offset is relative to last spw, so we need to adjust
+    # the offsets for this spw
+    #
+    chan_offset = chan_offset + chan_offset[-1] - chan_offset[spw_ind]
     #
     # Backup flags
     #
@@ -107,13 +117,13 @@ def main(field,vis='',config_file=''):
     logger.info("Done.")
     #
     # For each spectral line spectral window, unflag
-    # channels at answer + offset - width/2 to
-    # answer + offset + width/2
+    # channels at chan + offset - width/2 to
+    # chan + offset + width/2
     #
     flagcmd = ''
     for spw,offset in zip(my_line_spws.split(','),chan_offset):
-        flagcmd += '{0}:{1}~{2},'.format(spw,answer+int(offset)-int(chan_width/2),
-                                         answer+int(offset)+int(chan_width/2))
+        flagcmd += '{0}:{1}~{2},'.format(spw,chan+int(offset)-int(chan_width/2),
+                                         chan+int(offset)+int(chan_width/2))
     # remove last comma
     flagcmd = flagcmd[:-1]
     logger.info("Executing:")

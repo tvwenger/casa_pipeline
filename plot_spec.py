@@ -3,6 +3,7 @@ plot_spec.py
 CASA Data Reduction Pipeline - Plot continuum SED and
 line-to-continuum ratio vs frequency
 Trey V. Wenger September 2017 - V1.0
+Trey V. Wenger June 2018 - ignore multiple components except (a)
 """
 
 import os
@@ -13,7 +14,8 @@ import matplotlib.pyplot as plt
 __VERSION__ = "1.0"
 
 def main(specfile,title=None,sed_plot='cont_sed.pdf',fluxtype='flux',
-         line2cont_plot='line2cont.pdf',te_plot='te.pdf'):
+         line2cont_plot='line2cont.pdf',te_plot='te.pdf',
+         xmin=4000,xmax=10000):
     """
     Read output file from calc_te.py and plot continuum flux vs.
     frequency and line-to-continuum ratio vs. frequency
@@ -25,6 +27,8 @@ def main(specfile,title=None,sed_plot='cont_sed.pdf',fluxtype='flux',
     line2cont_plot = where you want to save the line-to-continuum
                      ratio vs. frequency plot
     te_plot = where you want to save the te vs frequency plot
+    xmin = minimum frequency axis (MHz)
+    xmax = maximum frequency axis (MHz)
 
     Returns:
       Nothing
@@ -33,6 +37,12 @@ def main(specfile,title=None,sed_plot='cont_sed.pdf',fluxtype='flux',
     # Read data
     #
     data = np.genfromtxt(specfile,dtype=None,names=True)
+    #
+    # Ignore multiple components except (a)
+    #
+    multcomps = ['(b)','(c)','(d)','(e)']
+    is_multcomp = np.array([lineid[-3:] in multcomps for lineid in data['lineid']])
+    data = data[~is_multcomp]
     #
     # Determine which are Hnalpha lines and which are stacked
     #
@@ -44,8 +54,6 @@ def main(specfile,title=None,sed_plot='cont_sed.pdf',fluxtype='flux',
     else:
         is_all = None
     # plot limits
-    xmin = 4000
-    xmax = 10000
     xfit = np.linspace(xmin,xmax,100)
     #
     # Plot continuum SED
