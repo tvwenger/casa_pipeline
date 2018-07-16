@@ -1,12 +1,9 @@
 """
-process_spectra_peak.py
+process_spectra_multcomp.py
 CASA Data Reduction Pipeline - Analyze spectra
-This differs from process_spectra.py in these ways:
-1. We are not uv-tapering and stacking images, instead we are extracting
-spectra from the un-tapered images.
-2. Since we are not stacking lines, they are not renamed to lineid.
-3. 
-Trey V. Wenger April 2018 - V1.0
+Same as process_spectra.py except for fitting multiple Gaussians
+simultaneously.
+Trey V. Wenger June 2018 - V1.0
 """
 
 import __main__ as casa # import casa namespace
@@ -26,11 +23,32 @@ __VERSION__ = "1.0"
 # load logging configuration file
 logging.config.fileConfig('logging.conf')
 
-def gaussian(xdata,amp,center,sigma):
+def gaussian(xdata,*args):
     """
-    Compute gaussian function
+    Compute sum of multiple Gaussian functions.
+
+    Inputs:
+      xdata : ndarray of scalars
+              The x-values at which to compute the Gaussian functions
+      args : scalars
+             a0,c0,s0,...,an,cn,sn
+             where a0 = amplitude of first Gaussian
+                   c0 = center of first Gaussian
+                   s0 = sigma width of first Gaussian
+                    n = number of Gaussian components
+
+    Returns:
+      ydata : ndarray of scalars
+              Sum of Gaussian functions evaluated at xdata.
     """
-    ydata = amp*np.exp(-(xdata-center)**2./(2.*sigma**2.))
+    if len(args) % 3 != 0:
+        raise ValueError("gaussian() arguments must be multiple of 3")
+    amps = args[0::3]
+    centers = args[1::3]
+    sigmas = args[2::3]
+    ydata = np.zeros(len(xdata))
+    for a,c,s in zip(amps,centers,sigmas):
+        ydata += a*np.exp(-(xdata-c)**2./(2.*s**2.))
     return ydata
 
 class ClickPlot:
@@ -222,27 +240,29 @@ class ClickPlot:
         self.ax.axvline(self.clickx_data[-1])
         self.fig.show()
         line_start = self.clickx_data[-1]
+        guesses = []
         print "Left click to select center of line"
-        self.fig.waitforbuttonpress()
-        self.ax.axvline(self.clickx_data[-1])
-        self.fig.show()
-        center_guess = self.clickx_data[-1]
-        print "Left click to select width of line"
-        self.fig.waitforbuttonpress()
-        self.ax.axvline(self.clickx_data[-1])
-        self.fig.show()
-        sigma_guess = self.clickx_data[-1]-center_guess
-        print "Left click to select end of line region."
-        self.fig.waitforbuttonpress()
-        self.ax.axvline(self.clickx_data[-1])
-        self.fig.show()
-        line_end = self.clickx_data[-1]
+        print "then left click to select width of line."
+        print "Repeat for each line, then"
+        print "left click to select end of line region."
+        print "Right click when finished."
+        while True:
+            self.fig.waitforbuttonpress()
+            if self.clickbutton[-1] == 3:
+                break
+            self.ax.axvline(self.clickx_data[-1])
+            self.fig.show()
+            guesses.append(self.clickx_data[-1])
+        center_guesses = np.array(guesses[0:-1:2])
+        sigma_guesses = np.array(guesses[1:-1:2])-center_guesses
+        line_end = guesses[-1]
         self.fig.canvas.mpl_disconnect(cid)
-        return line_start,center_guess,sigma_guess,line_end
+        return line_start,center_guesses,sigma_guesses,line_end
 
     def auto_get_gauss(self,xdata,ydata,xlabel=None,ylabel=None,title=None):
         """
-        Automatically get the gaussian fit estimates
+        Automatically get the gaussian fit estimates. Only fits
+        a single Gaussian component.
         """
         self.ax.clear()
         self.ax.grid(False)
@@ -313,24 +333,51 @@ class ClickPlot:
         self.fig.show()
         #plt.pause(0.1)
         #self.fig.waitforbuttonpress()
-        return line_start,line_center,line_width,line_end
+        return line_start,[line_center],[line_width],line_end
 
-    def plot_fit(self,xdata,ydata,amp,center,sigma,
+    def plot_fit(self,xdata,ydata,
+                 line_start,line_end,
+                 amp,center,sigma,
                  xlabel=None,ylabel=None,title=None,
                  outfile=None,auto=False):
         """
-        Plot data and fit and residuals
+        Plot data, fit, and residuals
         """
         self.ax.clear()
         self.ax.grid(False)
         self.ax.axhline(0,color='k')
-        yfit = gaussian(xdata,amp,center,sigma)
-        residuals = ydata-yfit
-        #self.ax.plot(xdata,residuals,'m-')
-        self.ax.step(xdata,residuals,'m-',where='mid')
-        self.ax.plot(xdata,yfit,'r-')
-        #self.ax.plot(xdata,ydata,'k-')
+        #
+        # Plot data
+        #
         self.ax.step(xdata,ydata,'k-',where='mid')
+        #
+        # Plot individual fits
+        #
+        args = []
+        colors = ['b','g','y','c']
+        for color,a,c,s in zip(colors,amp,center,sigma):
+            if len(amp) == 1:
+                color='r'
+            if np.any(np.isnan([a,c,s])):
+                continue
+            args += [a,c,s]
+            fwhm = 2.*np.sqrt(2.*np.log(2.))*s
+            yfit = gaussian(xdata,a,c,s)
+            self.ax.plot(xdata,yfit,color+'-',
+                         label='Amp: {0:.2f}; Center: {1:.1f}; FWHM: {2:.1f}'.format(a,c,fwhm))
+        #
+        # Plot combined fit (if necessary) and residuals
+        #
+        if not np.any(np.isnan(amp)):
+            if len(amp) > 1:
+                yfit = gaussian(xdata,*args)
+                self.ax.plot(xdata,yfit,'r-',label='Total')
+            ind = (xdata > line_start)&(xdata < line_end)
+            residuals = ydata-yfit
+            self.ax.step(xdata[ind],residuals[ind],'m-',where='mid')
+        #
+        # Add plot labels
+        #
         self.ax.set_title(title.replace('_','\_'))
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
@@ -342,6 +389,7 @@ class ClickPlot:
         ymin = np.min(ydata_cut)-0.10*yrange
         ymax = np.max(ydata_cut)+0.10*yrange
         self.ax.set_ylim(ymin,ymax)
+        self.ax.legend(loc='upper right',fontsize=10)
         self.fig.tight_layout()
         self.fig.savefig(outfile)
         self.fig.show()
@@ -485,28 +533,30 @@ def fit_line(imagename,region,fluxtype,specdata,outfile,auto=False):
     redo = False
     while True:
         if ((not auto) or redo):
-            line_start,center_guess,sigma_guess,line_end = \
+            line_start,center_guesses,sigma_guesses,line_end = \
             myplot.get_gauss(specdata_velocity,flux_contsub,
                              xlabel='Velocity (km/s)',ylabel=ylabel,
                              title=title)
         else: 
-            line_start,center_guess,sigma_guess,line_end = \
+            line_start,center_guesses,sigma_guesses,line_end = \
             myplot.auto_get_gauss(specdata_velocity,flux_contsub,
                                   xlabel='Velocity (km/s)',
                                   ylabel=ylabel,title=title)
-        if None in [line_start,center_guess,sigma_guess,line_end]:
+        if (None in [line_start,line_end] or None in center_guesses
+            or None in sigma_guesses):
             # No line to fit
-            line_brightness = np.nan
-            e_line_brightness = np.nan
-            line_center = np.nan
-            e_line_center = np.nan
-            line_sigma = np.nan
-            e_line_sigma = np.nan
-            line_fwhm = np.nan
-            e_line_fwhm = np.nan
+            line_brightness = np.array([np.nan])
+            e_line_brightness = np.array([np.nan])
+            line_center = np.array([np.nan])
+            e_line_center = np.array([np.nan])
+            line_sigma = np.array([np.nan])
+            e_line_sigma = np.array([np.nan])
+            line_fwhm = np.array([np.nan])
+            e_line_fwhm = np.array([np.nan])
         else:
-            center_idx = np.argmin(np.abs(specdata_velocity-center_guess))
-            amp_guess = flux_contsub[center_idx]
+            center_idxs = np.array([np.argmin(np.abs(specdata_velocity-c))
+                                    for c in center_guesses])
+            amp_guesses = flux_contsub[center_idxs]
             #
             # Extract line velocity and fluxes
             #
@@ -517,31 +567,41 @@ def fit_line(imagename,region,fluxtype,specdata,outfile,auto=False):
             # Fit gaussian to data
             #
             try:
+                p0 = []
+                bounds_lower = []
+                bounds_upper = []
+                for a,c,s in zip(amp_guesses,center_guesses,sigma_guesses):
+                    p0 += [a,c,s]
+                    bounds_lower += [0,line_start,0]
+                    bounds_upper += [np.inf,line_end,np.inf]
+                bounds = (bounds_lower,bounds_upper)
                 popt,pcov = curve_fit(gaussian,line_velocity,line_flux,
-                                      p0=(amp_guess,center_guess,sigma_guess),
+                                      p0=p0,bounds=bounds,
                                       sigma=np.ones(line_flux.size)*rms)
-                line_brightness = popt[0]
-                e_line_brightness = np.sqrt(pcov[0][0])
-                line_center = popt[1]
-                e_line_center = np.sqrt(pcov[1][1])
-                line_sigma = np.abs(popt[2])
-                e_line_sigma = np.sqrt(np.abs(pcov[2][2]))
+                line_brightness = popt[0::3]
+                e_line_brightness = np.sqrt(np.diag(pcov)[0::3])
+                line_center = popt[1::3]
+                e_line_center = np.sqrt(np.diag(pcov)[1::3])
+                line_sigma = np.abs(popt[2::3])
+                e_line_sigma = np.sqrt(np.abs(np.diag(pcov)[2::3]))
                 line_fwhm = 2.*np.sqrt(2.*np.log(2.))*line_sigma
                 e_line_fwhm = 2.*np.sqrt(2.*np.log(2.))*e_line_sigma
             except:
                 # Fit failed
-                line_brightness = np.nan
-                e_line_brightness = np.nan
-                line_center = np.nan
-                e_line_center = np.nan
-                line_sigma = np.nan
-                e_line_sigma = np.nan
-                line_fwhm = np.nan
-                e_line_fwhm = np.nan            
+                line_brightness = np.array([np.nan])
+                e_line_brightness = np.array([np.nan])
+                line_center = np.array([np.nan])
+                e_line_center = np.array([np.nan])
+                line_sigma = np.array([np.nan])
+                e_line_sigma = np.array([np.nan])
+                line_fwhm = np.array([np.nan])
+                e_line_fwhm = np.array([np.nan])            
         #
         # Plot fit
         #
-        myplot.plot_fit(specdata_velocity,flux_contsub,line_brightness,line_center,line_sigma,
+        myplot.plot_fit(specdata_velocity,flux_contsub,
+                        line_start,line_end,
+                        line_brightness,line_center,line_sigma,
                         xlabel='Velocity (km/s)',ylabel=ylabel,title=title,
                         outfile=outfile,auto=auto)
         """
@@ -741,20 +801,33 @@ def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
             # Check crazy, wonky fits if we're in auto mode
             #
             if auto:
-                if line_brightness < 0. or line_brightness > 1.e6: # 1000 Jy
+                if np.any(line_brightness > 1.e6): # 1000 Jy
                     continue
-                if line_to_cont < 0. or line_to_cont > 1.:
+                if np.any(line_to_cont > 10.):
                     continue
-                if np.isinf(e_line_fwhm) or np.isinf(e_line_center):
+                if np.any(np.isinf(e_line_fwhm)) or np.any(np.isinf(e_line_center)):
                     continue
+            #
+            # Sort line parameters by brightness
+            #
+            sortind = np.argsort(line_brightness)[::-1]
             # write line
-            f.write(rowfmt.format(lineid, restfreq,
-                                  line_center, e_line_center,
-                                  line_brightness, e_line_brightness,
-                                  line_fwhm, e_line_fwhm,
-                                  cont_brightness, rms,
-                                  line_to_cont, e_line_to_cont,
-                                  elec_temp, e_elec_temp, linesnr))
+            multcomps = ['(a)','(b)','(c)','(d)','(e)']
+            for multcomp,c,e_c,b,e_b,fw,e_fw,l2c,e_l2c,te,e_te,snr in \
+                zip(multcomps,line_center[sortind],e_line_center[sortind],
+                    line_brightness[sortind],e_line_brightness[sortind],
+                    line_fwhm[sortind],e_line_fwhm[sortind],
+                    line_to_cont[sortind],e_line_to_cont[sortind],
+                    elec_temp[sortind],e_elec_temp[sortind],
+                    linesnr[sortind]):
+                if len(line_brightness) == 1:
+                    mylineid = lineid
+                else:
+                    mylineid = lineid+multcomp
+                f.write(rowfmt.format(mylineid, restfreq,
+                                      c,e_c,b,e_b,fw,e_fw,
+                                      cont_brightness, rms,
+                                      l2c,e_l2c,te,e_te,snr))
             goodplots.append(outfile)
         #
         # Fit stacked RRLs
@@ -811,20 +884,33 @@ def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
             # Check crazy, wonky fits if we're in auto mode
             #
             if auto:
-                if line_brightness < 0. or line_brightness > 1.e6: # 1000 Jy
+                if np.any(line_brightness > 1.e6): # 1000 Jy
                     continue
-                if line_to_cont < 0. or line_to_cont > 1.:
+                if np.any(line_to_cont > 10.):
                     continue
-                if np.isinf(e_line_fwhm) or np.isinf(e_line_center):
+                if np.any(np.isinf(e_line_fwhm)) or np.any(np.isinf(e_line_center)):
                     continue
+            #
+            # Sort line parameters by line_brightness
+            #
+            sortind = np.argsort(line_brightness)[::-1]
             # write line
-            f.write(rowfmt.format(stackedlabel, stackedrestfreq,
-                                  line_center, e_line_center,
-                                  line_brightness, e_line_brightness,
-                                  line_fwhm, e_line_fwhm,
-                                  cont_brightness, rms,
-                                  line_to_cont, e_line_to_cont,
-                                  elec_temp, e_elec_temp, linesnr))
+            multcomps = ['(a)','(b)','(c)','(d)','(e)']
+            for multcomp,c,e_c,b,e_b,fw,e_fw,l2c,e_l2c,te,e_te,snr in \
+                zip(multcomps,line_center[sortind],e_line_center[sortind],
+                    line_brightness[sortind],e_line_brightness[sortind],
+                    line_fwhm[sortind],e_line_fwhm[sortind],
+                    line_to_cont[sortind],e_line_to_cont[sortind],
+                    elec_temp[sortind],e_elec_temp[sortind],
+                    linesnr[sortind]):
+                if len(line_brightness) == 1:
+                    mylineid = stackedlabel
+                else:
+                    mylineid = stackedlabel+multcomp
+                f.write(rowfmt.format(mylineid, stackedrestfreq,
+                                      c,e_c,b,e_b,fw,e_fw,
+                                      cont_brightness, rms,
+                                      l2c,e_l2c,te,e_te,snr))
             goodplots.append(outfile)
     #
     # Generate TeX file of all plots
@@ -854,4 +940,3 @@ def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
         f.write(r"\end{document}")
     os.system('pdflatex -interaction=batchmode {0}'.format(fname))
     logger.info("Done.")
-        

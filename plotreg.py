@@ -81,6 +81,11 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
         ax.set_xlabel('RA (J2000)')
         ax.set_ylabel('Declination (J2000)')
         #
+        # Adjust limits
+        #
+        ax.set_xlim(0.25*xlen,0.75*xlen)
+        ax.set_ylim(0.25*ylen,0.75*ylen)
+        #
         # Plot colorbar
         #
         cbar = fig.colorbar(cax,fraction=0.046,pad=0.04)
@@ -188,7 +193,7 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
                 ell = Ellipse((xpos,ypos),size,size,
                                color='m',fill=False,linestyle='dashed',zorder=105)
                 ax.add_patch(ell)
-                ax.text(R,D,dat['GName'],transform=ax.get_transform('world'),fontsize=4,zorder=105)
+                ax.text(R,D,dat['GName'],transform=ax.get_transform('world'),fontsize=10,zorder=105)
         #
         # Plot WISE regions
         #
@@ -215,7 +220,7 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
                 ell = Ellipse((xpos,ypos),size,size,
                                color='y',fill=False,linestyle='dashed',zorder=100)
                 ax.add_patch(ell)
-                ax.text(dat['RA'],dat['Dec'],dat['GName'],transform=ax.get_transform('world'),fontsize=4,zorder=100)
+                ax.text(dat['RA'],dat['Dec'],dat['GName'],transform=ax.get_transform('world'),fontsize=10,zorder=100)
         #
         # Add WISE+SHRDS legend
         #
