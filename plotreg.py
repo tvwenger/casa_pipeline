@@ -83,8 +83,8 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
         #
         # Adjust limits
         #
-        ax.set_xlim(0.25*xlen,0.75*xlen)
-        ax.set_ylim(0.25*ylen,0.75*ylen)
+        ax.set_xlim(0.1*xlen,0.9*xlen)
+        ax.set_ylim(0.1*ylen,0.9*ylen)
         #
         # Plot colorbar
         #
@@ -175,13 +175,13 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
             min_RA = np.min(corners[:,0])
             max_RA = np.max(corners[:,0])
             RA_range = max_RA - min_RA
-            min_RA += 0.25 * RA_range
-            max_RA -= 0.25 * RA_range
+            #min_RA += RA_range
+            #max_RA -= RA_range
             min_Dec = np.min(corners[:,1])
             max_Dec = np.max(corners[:,1])
             Dec_range = max_Dec - min_Dec
-            min_Dec += 0.25 * Dec_range
-            max_Dec -= 0.25 * Dec_range
+            #min_Dec += Dec_range
+            #max_Dec -= Dec_range
             good = (min_RA < RA)&(RA < max_RA)&(min_Dec < Dec)&(Dec < max_Dec)&(shrdsdata['flux']>fluxlimit)
             # plot them
             shrdsdata = shrdsdata[good]
@@ -204,13 +204,13 @@ def main(images,regions,colors,labels,shrdsfile=None,fluxlimit=0.,
             min_RA = np.min(corners[:,0])
             max_RA = np.max(corners[:,0])
             RA_range = max_RA - min_RA
-            min_RA += 0.25 * RA_range
-            max_RA -= 0.25 * RA_range
+            #min_RA += RA_range
+            #max_RA -= RA_range
             min_Dec = np.min(corners[:,1])
             max_Dec = np.max(corners[:,1])
             Dec_range = max_Dec - min_Dec
-            min_Dec += 0.25 * Dec_range
-            max_Dec -= 0.25 * Dec_range
+            #min_Dec += Dec_range
+            #max_Dec -= Dec_range
             good = (min_RA < wisedata['RA'])&(wisedata['RA'] < max_RA)&(min_Dec < wisedata['Dec'])&(wisedata['Dec'] < max_Dec)
             # plot them
             wisedata = wisedata[good]

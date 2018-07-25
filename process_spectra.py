@@ -153,13 +153,13 @@ class ClickPlot:
         smoy = gaussian_filter(ydata,sigma=5.)
         self.ax.plot(xdata,smoy,'g-')
         self.fig.show()
-        outliers = np.array([False]*len(xdata))
+        outliers = np.isnan(ydata)
         while True:
             pfit = np.polyfit(xdata[~outliers],smoy[~outliers],3)
             yfit = np.poly1d(pfit)
             new_smoy = smoy - yfit(xdata)
             rms = np.sqrt(np.mean(new_smoy[~outliers]**2.))
-            new_outliers = np.abs(new_smoy) > 3.*rms
+            new_outliers = (np.abs(new_smoy) > 3.*rms) | np.isnan(ydata)
             if np.sum(new_outliers) == np.sum(outliers):
                 break
             outliers = new_outliers
@@ -289,10 +289,10 @@ class ClickPlot:
         smoy = gaussian_filter(ydata,sigma=3.)
         self.ax.plot(xdata,smoy,'g-')
         self.fig.show()
-        outliers = np.array([False]*len(xdata))
+        outliers = np.isnan(ydata)
         while True:
             rms = np.sqrt(np.mean(smoy[~outliers]**2.))
-            new_outliers = np.abs(smoy) > 4.5*rms
+            new_outliers = (np.abs(smoy) > 4.5*rms) | np.isnan(ydata)
             if np.sum(new_outliers) == np.sum(outliers):
                 break
             outliers = new_outliers
@@ -426,6 +426,8 @@ def dump_spec(imagename,region,fluxtype):
     try:
         specdata = np.genfromtxt(logfile,comments='#',dtype=None,
                                  names=('channel','npts','freq','velocity','flux'))
+        isnan = specdata['flux'] == 0.
+        specdata['flux'][isnan] = np.nan
         return specdata
     except:
         # region is all NaNs (i.e. outside of primary beam)
@@ -636,13 +638,13 @@ def calc_rms(ydata):
     # do this on data smoothed by gaussian 3 channels
     #
     smoy = gaussian_filter(ydata,sigma=5.)
-    outliers = np.array([False]*len(xdata))
+    outliers = np.isnan(ydata)
     while True:
         pfit = np.polyfit(xdata[~outliers],smoy[~outliers],3)
         yfit = np.poly1d(pfit)
         new_smoy = smoy - yfit(xdata)
         rms = np.sqrt(np.mean(new_smoy[~outliers]**2.))
-        new_outliers = np.abs(new_smoy) > 3.*rms
+        new_outliers = (np.abs(new_smoy) > 3.*rms) | np.isnan(ydata)
         if np.sum(new_outliers) == np.sum(outliers):
             break
         outliers = new_outliers
@@ -846,11 +848,11 @@ def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
                     continue
                 avgspecdata = specdata
                 specdatas.append(specdata['flux'])
-                specfreqs.append(np.mean(specdata['freq']))
+                specfreqs.append(np.nanmean(specdata['freq']))
                 # estimate rms
                 if weight:
                     rms = calc_rms(specdata['flux'])
-                    weights.append(np.mean(specdata['flux'])/rms**2.)
+                    weights.append(np.nanmean(specdata['flux'])/rms**2.)
             specdatas = np.array(specdatas)
             specfreqs = np.array(specfreqs)
             weights = np.array(weights)
@@ -861,8 +863,8 @@ def main(field,region,spws=[],stackedspws=[],stackedlabels=[],
                 outfile = '{0}.{1}.channel.{2}.pbcor.image.{3}.wt.spec.pdf'.format(field,stackedlabel,linetype,region)
                 imagetitle = '{0}.{1}.channel.{2}.pbcor.image (wt)'.format(field,stackedlabel,linetype)
             else:
-                specaverage = np.mean(specdatas,axis=0)
-                stackedrestfreq = np.mean(specfreqs)
+                specaverage = np.nanmean(specdatas,axis=0)
+                stackedrestfreq = np.nanmean(specfreqs)
                 outfile = '{0}.{1}.channel.{2}.pbcor.image.{3}.spec.pdf'.format(field,stackedlabel,linetype,region)
                 imagetitle = '{0}.{1}.channel.{2}.pbcor.image'.format(field,stackedlabel,linetype)
             avgspecdata['flux'] = specaverage

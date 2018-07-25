@@ -1170,6 +1170,8 @@ def lineplot(field,line_spws='',uvtaper=False,cp={}):
             fitsfile = '{0}.spw{1}.channel.clean.image.fits'.format(field,spw)
         hdu = fits.open(fitsfile)[0]
         spec = hdu.data[0,:,center_x,center_y]
+        isnan = spec == 0.
+        spec[isnan] = np.nan
         velo = (np.arange(len(spec))*hdu.header['CDELT3'] + hdu.header['CRVAL3'])/1000.
         #
         # Generate figure
@@ -1180,9 +1182,9 @@ def lineplot(field,line_spws='',uvtaper=False,cp={}):
         ax.plot(velo,spec,'k-')
         ax.set_xlabel('Velocity (km/s)')
         ax.set_ylabel('Flux Density (Jy/beam)')
-        ax.set_xlim(np.min(velo),np.max(velo))
-        ybuff = 0.1*(np.max(spec)-np.min(spec))
-        ax.set_ylim(np.min(spec)-ybuff,np.max(spec)+ybuff)
+        ax.set_xlim(np.nanmin(velo),np.nanmax(velo))
+        ybuff = 0.1*(np.nanmax(spec)-np.nanmin(spec))
+        ax.set_ylim(np.nanmin(spec)-ybuff,np.nanmax(spec)+ybuff)
         if uvtaper:
             ax.set_title('{0} - spw {1} - UVTap/Center'.format(field,spw))
         else:
