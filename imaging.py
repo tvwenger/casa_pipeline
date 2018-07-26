@@ -249,7 +249,7 @@ def mfs_dirty_cont(field='',vis='',my_cont_spws='',cp={},
     logger.info("Done.")
 
 def mfs_clean_cont(field='',vis='',my_cont_spws='',cp={},
-                   uvtaper=False):
+                   uvtaper=False,interactive=False):
     """
     Clean continuum spws using multi-frequency synthesis
 
@@ -259,6 +259,7 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',cp={},
       my_cont_spws = comma-separated string of continuum spws
       cp = dictionary of clean parameters
       uvtaper      = if True, apply UV tapering
+      interactive = if True, clean interactively
 
     Returns:
       Nothing
@@ -324,7 +325,8 @@ def mfs_clean_cont(field='',vis='',my_cont_spws='',cp={},
                 gain=cp['gain'],cyclefactor=cp['cyclefactor'],
                 imsize=cp['imsize'],pblimit=-1.0,cell=cp['cell'],
                 weighting=cp['weighting'],robust=cp['robust'],
-                uvtaper=cp['outertaper'],pbcor=False)
+                uvtaper=cp['outertaper'],pbcor=False,
+                interactive=interactive)
     logger.info("Done.")
     #
     # Primary beam correction using PB of center channel
@@ -438,7 +440,7 @@ def mfs_dirty_spws(field='',vis='',my_spws='',
         logger.info("Done.")
 
 def mfs_clean_spws(field='',vis='',my_spws='',
-                   cp={},uvtaper=False):
+                   cp={},uvtaper=False,interactive=False):
     """
     Clean each supplied spw (MFS)
 
@@ -448,6 +450,7 @@ def mfs_clean_spws(field='',vis='',my_spws='',
       my_spws = comma-separated string of spws to image
       cp = dictionary of clean parameters
       uvtaper      = if True, apply UV tapering
+      interactive = if True, clean interactively
 
     Returns:
       Nothing
@@ -512,7 +515,8 @@ def mfs_clean_spws(field='',vis='',my_spws='',
                     gain=cp['gain'],cyclefactor=cp['cyclefactor'],
                     imsize=cp['imsize'],pblimit=-1.0,cell=cp['cell'],
                     weighting=cp['weighting'],robust=cp['robust'],
-                    uvtaper=cp['outertaper'],pbcor=False)
+                    uvtaper=cp['outertaper'],pbcor=False,
+                    interactive=interactive)
         logger.info("Done.")
         #
         # Primary beam correction
@@ -668,7 +672,7 @@ def channel_dirty_spws(field='',vis='',my_spws='',
 
 def channel_clean_spws(field='',vis='',my_spws='',
                        cp={},spwtype='line',regrid=False,
-                       config=None,uvtaper=False):
+                       config=None,uvtaper=False,interactive=False):
     """
     Clean all supplied spws by channel using clean mask from MFS
     images.
@@ -683,6 +687,7 @@ def channel_clean_spws(field='',vis='',my_spws='',
       regrid       = if True, look for CVEL2 measurement set
       config       = ConfigParser object for this project
       uvtaper      = if True, apply UV tapering
+      interactive = if True, clean interactively
 
     Returns:
       Nothing
@@ -790,7 +795,7 @@ def channel_clean_spws(field='',vis='',my_spws='',
                     weighting=cp['weighting'],robust=cp['robust'],
                     restfreq=restfreq,start=start,width=width,nchan=nchan,
                     outframe=outframe,veltype=veltype,interpolation=interpolation,
-                    uvtaper=cp['outertaper'],pbcor=False)
+                    uvtaper=cp['outertaper'],pbcor=False,interactive=interactive)
         logger.info("Done.")
         #
         # Primary beam correction
@@ -1225,7 +1230,8 @@ def lineplot(field,line_spws='',uvtaper=False,cp={}):
     logger.info("Done.")
 
 def main(field,vis='',spws='',config_file='',
-         uvtaper=False,regrid=False,auto='',skip_check=False):
+         uvtaper=False,regrid=False,auto='',skip_check=False,
+         interactive=False):
     """
     Generate continuum and line images in various ways using autoclean
 
@@ -1241,6 +1247,7 @@ def main(field,vis='',spws='',config_file='',
                     list of menu items to perform, i.e.
                     auto='0,1,4,5,6'
       skip_check = if True, skip checking for good spws
+      interactive = if True, interactively clean
 
     Returns:
       Nothing
@@ -1329,7 +1336,8 @@ def main(field,vis='',spws='',config_file='',
             mfs_clean_cont(field=field,vis=vis,
                            my_cont_spws=my_cont_spws,
                            cp=cp,
-                           uvtaper=uvtaper)
+                           uvtaper=uvtaper,
+                           interactive=interactive)
         elif answer == '2':
             mfs_dirty_spws(field=field,vis=vis,
                            my_spws=my_cont_spws,
@@ -1339,7 +1347,8 @@ def main(field,vis='',spws='',config_file='',
             mfs_clean_spws(field=field,vis=vis,
                            my_spws=my_cont_spws,
                            cp=cp,
-                           uvtaper=uvtaper)
+                           uvtaper=uvtaper,
+                           interactive=interactive)
         elif answer == '4':
             channel_dirty_spws(field=field,vis=vis,
                                     my_spws=my_cont_spws,
@@ -1353,7 +1362,8 @@ def main(field,vis='',spws='',config_file='',
                                     cp=cp,spwtype='cont',
                                     regrid=False,
                                     config=config,
-                                    uvtaper=uvtaper)
+                                    uvtaper=uvtaper,
+                                    interactive=interactive)
         elif answer == '6':
             mfs_dirty_spws(field=field,vis=vis,
                            my_spws=my_line_spws,
@@ -1363,7 +1373,8 @@ def main(field,vis='',spws='',config_file='',
             mfs_clean_spws(field=field,vis=vis,
                            my_spws=my_line_spws,
                            cp=cp,
-                           uvtaper=uvtaper)
+                           uvtaper=uvtaper,
+                           interactive=interactive)
         elif answer == '8':
             channel_dirty_spws(field=field,vis=vis,
                                     my_spws=my_line_spws,
@@ -1377,7 +1388,8 @@ def main(field,vis='',spws='',config_file='',
                                     cp=cp,spwtype='line',
                                     regrid=regrid,
                                     config=config,
-                                    uvtaper=uvtaper)
+                                    uvtaper=uvtaper,
+                                    interactive=interactive)
         elif answer == '10':
             contplot(field,uvtaper=uvtaper,cp=cp)
             lineplot(field,line_spws=all_line_spws,uvtaper=uvtaper,
